@@ -88,11 +88,26 @@ chmod -R u+w "$RUBY_BOOTSTRAP_DIR"
 # Check if the tarball extracted with a ruby-2.6.6 directory structure
 if [ -d "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6" ]; then
   log "Found ruby-2.6.6 directory structure, moving files..."
+  
+  # Check for rubygems.rb in the extracted directory
+  if [ -f "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6/lib/rubygems.rb" ]; then
+    log "Found rubygems.rb in extracted directory"
+  else
+    log "WARNING: rubygems.rb not found in extracted directory"
+  fi
+  
   # Move all files including hidden ones
   cp -a "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6"/. "$RUBY_BOOTSTRAP_DIR/"
   
   # Remove the source directory
   rm -rf "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6"
+  
+  # Verify rubygems.rb was copied correctly
+  if [ -f "$RUBY_BOOTSTRAP_DIR/lib/rubygems.rb" ]; then
+    log "rubygems.rb was copied successfully to $RUBY_BOOTSTRAP_DIR/lib/rubygems.rb"
+  else
+    log "WARNING: rubygems.rb was not copied correctly"
+  fi
 elif [ -d "$RUBY_BOOTSTRAP_DIR/bin" ] && [ -f "$RUBY_BOOTSTRAP_DIR/bin/ruby" ]; then
   log "Ruby files already in correct location"
 else

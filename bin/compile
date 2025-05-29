@@ -121,9 +121,108 @@ if [ ! -f "$bootstrap_ruby_dir/bin/ruby" ]; then
   exit 1
 fi
 
+# Verify environment before executing Ruby
+echo "Verifying Ruby environment:"
+echo "------------------------"
+echo "Ruby binary location: $bootstrap_ruby_dir/bin/ruby"
+echo "Library path: $bootstrap_ruby_dir/lib/shared:$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+echo "GEM_HOME: $bootstrap_ruby_dir/lib/ruby/gems/2.6.0"
+
+# Set RUBYLIB to include all possible locations where rubygems.rb might be found
+export RUBYLIB="$bootstrap_ruby_dir/lib:$bootstrap_ruby_dir/lib/ruby:$bootstrap_ruby_dir/lib/ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/2.6.0/x86_64-linux:$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0"
+echo "RUBYLIB: $RUBYLIB"
+echo "PATH: $PATH"
+
+# Test the Ruby binary to ensure it works
+echo "Testing Ruby binary:"
+if LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib/shared:$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$bootstrap_ruby_dir/bin/ruby" -v; then
+  echo "Ruby binary test successful"
+else
+  echo "ERROR: Ruby binary test failed"
+  exit 1
+ fi
+
+# Check if rubygems.rb exists in any of the directories
+echo "Checking for rubygems.rb:"
+rubygems_found=false
+rubygems_path=""
+
+find "$bootstrap_ruby_dir/lib" -name "rubygems.rb" | while read -r file; do
+  echo "Found rubygems.rb at: $file"
+  rubygems_found=true
+  rubygems_path="$file"
+done
+
+# Special handling for the case where rubygems.rb is in the lib directory
+if [ -f "$bootstrap_ruby_dir/lib/rubygems.rb" ]; then
+  echo "Found rubygems.rb at the top level lib directory"
+  rubygems_found=true
+  rubygems_path="$bootstrap_ruby_dir/lib/rubygems.rb"
+fi
+
+# If rubygems.rb is found somewhere but not in the standard location, create symlinks
+if [ "$rubygems_found" = "true" ] && [ ! -f "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb" ]; then
+  echo "Creating symlinks to existing rubygems.rb"
+  mkdir -p "$bootstrap_ruby_dir/lib/ruby/2.6.0"
+  ln -sf "$rubygems_path" "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb"
+  echo "Created symlink at $bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb"
+  
+  # Also create symlinks in other Ruby load paths
+  for dir in "$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0" "$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0"; do
+    mkdir -p "$dir"
+    ln -sf "$rubygems_path" "$dir/rubygems.rb"
+    echo "Created symlink at $dir/rubygems.rb"
+  done
+# If rubygems.rb is not found anywhere, create a minimal one
+elif [ ! -f "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb" ]; then
+  echo "rubygems.rb not found, creating a minimal one"
+  mkdir -p "$bootstrap_ruby_dir/lib/ruby/2.6.0"
+  cat > "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb" << 'EOF'
+# Minimal RubyGems implementation
+module Gem
+  VERSION = "3.0.3"
+  
+  class LoadError < ::LoadError
+  end
+  
+  def self.path
+    @gem_path ||= [ENV['GEM_HOME']].compact
+  end
+  
+  def self.paths
+    @gem_paths ||= {}
+    @gem_paths[:path] ||= path
+    @gem_paths
+  end
+  
+  def self.ruby
+    @ruby ||= File.join(RbConfig::CONFIG['bindir'],
+                        RbConfig::CONFIG['ruby_install_name'])
+    @ruby << RbConfig::CONFIG['EXEEXT']
+  end
+end
+EOF
+  echo "Created minimal rubygems.rb at $bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb"
+  
+  # Create symlinks to ensure it's found in all possible locations
+  for dir in "$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0" "$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0"; do
+    mkdir -p "$dir"
+    ln -sf "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb" "$dir/rubygems.rb"
+    echo "Created symlink at $dir/rubygems.rb"
+  done
+fi
+
+# Also create a symlink at the top level lib directory if it doesn't exist
+if [ ! -f "$bootstrap_ruby_dir/lib/rubygems.rb" ]; then
+  if [ -f "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb" ]; then
+    ln -sf "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb" "$bootstrap_ruby_dir/lib/rubygems.rb"
+    echo "Created symlink at $bootstrap_ruby_dir/lib/rubygems.rb"
+  fi
+fi
+
 # Execute Ruby with explicit environment variables to ensure library paths are set correctly
 LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib/shared:$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   PATH="$bootstrap_ruby_dir/bin:$PATH" \
   GEM_HOME="$bootstrap_ruby_dir/lib/ruby/gems/2.6.0" \
-  RUBYLIB="$bootstrap_ruby_dir/lib/ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/2.6.0/x86_64-linux:$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0" \
+  RUBYLIB="$bootstrap_ruby_dir/lib:$bootstrap_ruby_dir/lib/ruby:$bootstrap_ruby_dir/lib/ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/2.6.0/x86_64-linux:$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0" \
   "$bootstrap_ruby_dir/bin/ruby" "$BIN_DIR/support/ruby_compile" "$@"
