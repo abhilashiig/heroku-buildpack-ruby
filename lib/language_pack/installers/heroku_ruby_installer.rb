@@ -12,11 +12,8 @@ class LanguagePack::Installers::HerokuRubyInstaller
 
   def initialize(stack: , multi_arch_stacks: , arch: , report: HerokuBuildReport::GLOBAL)
     @report = report
-    if multi_arch_stacks.include?(stack)
-      @fetcher = LanguagePack::Fetcher.new(BASE_URL, stack: stack, arch: arch)
-    else
-      @fetcher = LanguagePack::Fetcher.new(BASE_URL, stack: stack)
-    end
+    # Always use heroku-20 stack for Ruby downloads
+    @fetcher = LanguagePack::Fetcher.new(BASE_URL, stack: "heroku-20")
   end
 
   def install(ruby_version, install_dir)
