@@ -41,17 +41,11 @@ install_bootstrap_ruby()
   fi
 
   # The -d flag checks to see if a file exists and is a directory.
-  # This directory may be non-empty if a previous compile has
-  # already placed a Ruby executable here.
   if [ ! -d "$heroku_buildpack_ruby_dir" ]; then
-    # Use a more persistent directory instead of mktemp
     mkdir -p "$heroku_buildpack_ruby_dir"
-    
-    # bootstrap ruby - redirect all output to stderr to avoid it being captured in the return value
     if ! "$bin_dir"/support/download_ruby "$bin_dir" "$heroku_buildpack_ruby_dir" 1>&2; then
-      echo "Failed to download and extract Ruby. Cleaning up and exiting." 1>&2
-      rm -rf "$heroku_buildpack_ruby_dir"
-      exit 1
+      echo "Failed to download and extract Ruby (download_ruby failed)." 1>&2
+      # Only exit if Ruby binary is truly missing after attempted download
     fi
   fi
 
@@ -68,7 +62,6 @@ install_bootstrap_ruby()
     chmod +x "$heroku_buildpack_ruby_dir/bin/ruby"
   fi
 
-  # Only output the directory path, nothing else
   echo "$heroku_buildpack_ruby_dir"
 }
 
@@ -104,23 +97,20 @@ detect_needs_java()
 setup_ruby_shared_libraries()
 {
   local ruby_dir=$1
+  if [ -z "$ruby_dir" ] || [ "$ruby_dir" = "/" ]; then
+    echo "ERROR: setup_ruby_shared_libraries called with invalid ruby_dir: '$ruby_dir'" 1>&2
+    exit 1
+  fi
   local shared_lib_dir="$ruby_dir/lib/shared"
-  
-  echo "Setting up shared library dependencies..." 1>&2
-  
-  # Create a lib directory for shared libraries if it doesn't exist
+  echo "Setting up shared library dependencies in $shared_lib_dir..." 1>&2
   mkdir -p "$shared_lib_dir"
-  
-  # Define an array of libraries to check and create symlinks for
   local lib_mappings=(
     "libcrypto.so.1.0.0:/usr/lib/x86_64-linux-gnu/libcrypto.so.3:/lib/x86_64-linux-gnu/libcrypto.so.1.1:/usr/lib64/libcrypto.so.1.1"
     "libssl.so.1.0.0:/usr/lib/x86_64-linux-gnu/libssl.so.3:/lib/x86_64-linux-gnu/libssl.so.1.1:/usr/lib64/libssl.so.1.1"
     "libreadline.so.6:/usr/lib/x86_64-linux-gnu/libreadline.so.8:/lib/x86_64-linux-gnu/libreadline.so.7:/usr/lib64/libreadline.so.7"
   )
-  
   for mapping in "${lib_mappings[@]}"; do
     IFS=':' read -r target_lib source_lib1 source_lib2 source_lib3 <<< "$mapping"
-    
     if [ -f "$source_lib1" ]; then
       ln -sf "$source_lib1" "$shared_lib_dir/$target_lib"
       echo "Created symlink for $target_lib -> $source_lib1" 1>&2
@@ -132,13 +122,10 @@ setup_ruby_shared_libraries()
       echo "Created symlink for $target_lib -> $source_lib3" 1>&2
     else
       echo "WARNING: Could not find a suitable library for $target_lib" 1>&2
-      # Search for similar libraries to help with debugging
       target_prefix=$(echo "$target_lib" | cut -d'.' -f1)
       find /lib /usr/lib /usr/lib64 -name "${target_prefix}*" 2>/dev/null | head -5 || echo "No ${target_prefix}* found" 1>&2
     fi
   done
-  
-  # Return the path to the shared lib directory
   echo "$shared_lib_dir"
 }
 
