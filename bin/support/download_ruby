@@ -76,6 +76,19 @@ if [ -d "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6" ]; then
   # Ensure bin directory exists and has correct permissions
   mkdir -p "$RUBY_BOOTSTRAP_DIR/bin"
   chmod -R u+x "$RUBY_BOOTSTRAP_DIR/bin"
+  
+  # Verify Ruby binary
+  if [ -f "$RUBY_BOOTSTRAP_DIR/bin/ruby" ]; then
+    echo "Ruby binary found. Setting permissions..."
+    chmod 755 "$RUBY_BOOTSTRAP_DIR/bin/ruby"
+    echo "Verifying Ruby binary..."
+    file "$RUBY_BOOTSTRAP_DIR/bin/ruby"
+    echo "Testing Ruby binary..."
+    "$RUBY_BOOTSTRAP_DIR/bin/ruby" -v || echo "Ruby binary test failed"
+  else
+    echo "ERROR: Ruby binary not found in expected location"
+    exit 1
+  fi
 fi
 
 echo "Extraction complete. Contents of $RUBY_BOOTSTRAP_DIR:"
