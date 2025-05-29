@@ -29,7 +29,7 @@ ruby_url() {
   local stack=$1
   local version=$2
 
-  echo "http://echologhq.com/heroku/ruby-2.6.6.tgz"
+  echo "https://echologhq.com/heroku/ruby-2.6.6.tgz"
 }
 
 # Pull ruby version out of buildpack.toml to be used with bootstrapping
