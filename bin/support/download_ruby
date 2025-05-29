@@ -45,6 +45,7 @@ fi
 
 mkdir -p "$RUBY_BOOTSTRAP_DIR"
 
+echo "Downloading Ruby from: $heroku_buildpack_ruby_url"
 curl_retry_on_18 --fail --retry 3 --retry-connrefused --connect-timeout "${CURL_CONNECT_TIMEOUT:-3}" --silent --location -o "$RUBY_BOOTSTRAP_DIR/ruby.tgz" "$heroku_buildpack_ruby_url" || {
 cat<<EOF
   Failed to download a Ruby executable for bootstrapping!
@@ -58,4 +59,8 @@ EOF
   exit 1
 }
 
+echo "Download complete. File size: $(ls -l "$RUBY_BOOTSTRAP_DIR/ruby.tgz" | awk '{print $5}') bytes"
+echo "Extracting Ruby to: $RUBY_BOOTSTRAP_DIR"
 tar xzf "$RUBY_BOOTSTRAP_DIR/ruby.tgz" -C "$RUBY_BOOTSTRAP_DIR"
+echo "Extraction complete. Contents of $RUBY_BOOTSTRAP_DIR:"
+ls -la "$RUBY_BOOTSTRAP_DIR"
