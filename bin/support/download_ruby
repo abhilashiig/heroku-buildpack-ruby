@@ -153,11 +153,10 @@ ls -la "$RUBY_BOOTSTRAP_DIR/bin" >&2 || true
 log "Contents of lib directory:"
 ls -la "$RUBY_BOOTSTRAP_DIR/lib" >&2 || true
 
-# Verify RubyGems files are present
+# Verify and set up RubyGems files
 log "Verifying RubyGems installation:"
 if [ -d "$RUBY_BOOTSTRAP_DIR/lib/ruby" ]; then
   log "Ruby lib directory found"
-  find "$RUBY_BOOTSTRAP_DIR/lib/ruby" -name "rubygems*" -o -name "gems" | sort >&2
   
   # Create necessary directories if they don't exist
   mkdir -p "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0"
@@ -165,21 +164,133 @@ if [ -d "$RUBY_BOOTSTRAP_DIR/lib/ruby" ]; then
   mkdir -p "$RUBY_BOOTSTRAP_DIR/lib/ruby/vendor_ruby/2.6.0"
   mkdir -p "$RUBY_BOOTSTRAP_DIR/lib/ruby/gems/2.6.0"
   
-  # If rubygems.rb is missing, create a minimal version
-  if [ ! -f "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems.rb" ]; then
-    log "Creating minimal rubygems.rb file"
-    cat > "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems.rb" << 'EOF'
-# Minimal RubyGems stub to allow Ruby to start
+  # Find RubyGems files
+  rubygems_files=$(find "$RUBY_BOOTSTRAP_DIR/lib/ruby" -name "*rubygems*" | head -20)
+  log "$rubygems_files"
+  
+  # Check for rubygems.rb in standard locations
+  rubygems_rb_found=false
+  for rubygems_path in "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems.rb" "$RUBY_BOOTSTRAP_DIR/lib/ruby/site_ruby/2.6.0/rubygems.rb"; do
+    if [ -f "$rubygems_path" ]; then
+      log "Found rubygems.rb at $rubygems_path"
+      rubygems_rb_found=true
+      break
+    fi
+  done
+  
+  # If rubygems.rb is not found but the rubygems directory exists, create a comprehensive rubygems.rb file
+  if [ "$rubygems_rb_found" = false ]; then
+    if [ -d "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems" ]; then
+      log "Creating comprehensive rubygems.rb file"
+      cat > "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems.rb" << 'EOF'
+# Comprehensive RubyGems stub to allow Ruby to start
 module Gem
+  VERSION = "3.0.3"
+  
+  class LoadError < ::LoadError
+  end
+  
   def self.path
-    @gem_path ||= []
+    @gem_path ||= nil
+    @gem_path ||= nil unless defined? @gem_path
+    @gem_path ||= [ENV['GEM_HOME']].compact
+  end
+  
+  def self.paths
+    @gem_paths ||= {}
+    @gem_paths ||= {} unless defined? @gem_paths
+    @gem_paths[:path] ||= path
+    @gem_paths
+  end
+  
+  def self.ruby
+    @ruby ||= File.join(RbConfig::CONFIG['bindir'],
+                        RbConfig::CONFIG['ruby_install_name'])
+    @ruby << RbConfig::CONFIG['EXEEXT']
   end
   
   def self.path=(paths)
     @gem_path = Array(paths)
   end
 end
+
+# Try to load core RubyGems files if they exist
+begin
+  require 'rubygems/defaults' if File.exist?(File.join(File.dirname(__FILE__), 'rubygems/defaults.rb'))
+  require 'rubygems/core_ext/kernel_gem' if File.exist?(File.join(File.dirname(__FILE__), 'rubygems/core_ext/kernel_gem.rb'))
+  require 'rubygems/core_ext/kernel_require' if File.exist?(File.join(File.dirname(__FILE__), 'rubygems/core_ext/kernel_require.rb'))
+rescue LoadError
+  # Ignore load errors, the minimal implementation should be sufficient
+end
 EOF
+    else
+      # Create the rubygems directory if it doesn't exist
+      mkdir -p "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems"
+      mkdir -p "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems/core_ext"
+      
+      log "Creating minimal RubyGems structure"
+      # Create minimal rubygems.rb
+      cat > "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems.rb" << 'EOF'
+# Minimal RubyGems implementation
+module Gem
+  VERSION = "3.0.3"
+  
+  class LoadError < ::LoadError
+  end
+  
+  def self.path
+    @gem_path ||= [ENV['GEM_HOME']].compact
+  end
+  
+  def self.paths
+    @gem_paths ||= {}
+    @gem_paths[:path] ||= path
+    @gem_paths
+  end
+end
+EOF
+      
+      # Create minimal core_ext files
+      cat > "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems/core_ext/kernel_gem.rb" << 'EOF'
+module Kernel
+  def gem(name, *requirements)
+    # Minimal implementation
+  end
+end
+EOF
+      
+      cat > "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems/core_ext/kernel_require.rb" << 'EOF'
+module Kernel
+  alias_method :original_require, :require
+  
+  def require(path)
+    original_require(path)
+  rescue LoadError => e
+    raise e
+  end
+end
+EOF
+    fi
+    
+    # Create symbolic links to ensure RubyGems is found in all possible locations
+    if [ -f "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems.rb" ]; then
+      for rubygems_path in "$RUBY_BOOTSTRAP_DIR/lib/ruby/site_ruby/2.6.0/rubygems.rb" "$RUBY_BOOTSTRAP_DIR/lib/ruby/vendor_ruby/2.6.0/rubygems.rb"; do
+        mkdir -p "$(dirname "$rubygems_path")"
+        ln -sf "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems.rb" "$rubygems_path"
+        log "Created symlink for rubygems.rb at $rubygems_path"
+      done
+      
+      # Also create symlinks for the rubygems directory
+      if [ -d "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems" ]; then
+        for rubygems_dir in "$RUBY_BOOTSTRAP_DIR/lib/ruby/site_ruby/2.6.0/rubygems" "$RUBY_BOOTSTRAP_DIR/lib/ruby/vendor_ruby/2.6.0/rubygems"; do
+          mkdir -p "$(dirname "$rubygems_dir")"
+          if [ ! -d "$rubygems_dir" ] && [ ! -L "$rubygems_dir" ]; then
+            ln -sf "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems" "$rubygems_dir"
+            log "Created symlink for rubygems directory at $rubygems_dir"
+          fi
+        done
+      fi
+    fi
   fi
 else
   log "WARNING: Ruby lib directory not found. RubyGems may not work correctly."

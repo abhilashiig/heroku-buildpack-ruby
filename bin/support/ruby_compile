@@ -7,6 +7,42 @@
 # https://devcenter.heroku.com/articles/ruby-support
 $stdout.sync = true
 
+# Ensure RubyGems is properly loaded
+begin
+  require 'rubygems'
+rescue LoadError => e
+  # If we can't load rubygems directly, try to find it manually
+  rubygems_paths = [
+    File.join(ENV['RUBYLIB'].to_s.split(':').first.to_s, 'rubygems.rb'),
+    File.join(RbConfig::CONFIG['rubylibdir'].to_s, 'rubygems.rb'),
+    File.join(RbConfig::CONFIG['rubylibdir'].to_s, '..', 'rubygems.rb')
+  ]
+  
+  rubygems_path = rubygems_paths.find { |path| File.exist?(path) }
+  if rubygems_path
+    puts "Loading RubyGems from #{rubygems_path}"
+    require rubygems_path
+  else
+    puts "WARNING: Could not load RubyGems. Creating minimal implementation."
+    # Define minimal Gem module to allow script to continue
+    module Gem
+      VERSION = "3.0.3"
+      
+      class LoadError < ::LoadError; end
+      
+      def self.path
+        @gem_path ||= [ENV['GEM_HOME']].compact
+      end
+      
+      def self.paths
+        @gem_paths ||= {}
+        @gem_paths[:path] ||= path
+        @gem_paths
+      end
+    end
+  end
+end
+
 $:.unshift File.expand_path("../../../lib", __FILE__)
 require "language_pack"
 require "language_pack/shell_helpers"

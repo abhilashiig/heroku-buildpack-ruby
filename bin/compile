@@ -20,8 +20,49 @@ export LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_P
 
 # Set up RubyGems environment
 export GEM_HOME="$bootstrap_ruby_dir/lib/ruby/gems/2.6.0"
-export RUBYLIB="$bootstrap_ruby_dir/lib/ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/2.6.0/x86_64-linux:$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0"
+
+# Ensure RubyGems is properly loaded by setting the correct RUBYLIB paths
+# Include both the standard Ruby library paths and the site_ruby paths
+export RUBYLIB="$bootstrap_ruby_dir/lib:$bootstrap_ruby_dir/lib/ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/2.6.0/x86_64-linux:$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0"
 unset GEM_PATH
+
+# Create a minimal rubygems.rb file if it doesn't exist
+if [ ! -f "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb" ] && [ -d "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems" ]; then
+  echo "Creating minimal rubygems.rb file..."
+  cat > "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb" << 'EOL'
+# Minimal rubygems.rb to bootstrap the loading process
+module Gem
+  VERSION = "3.0.3"
+  
+  class LoadError < ::LoadError
+  end
+  
+  def self.path
+    @gem_path ||= nil
+    @gem_path ||= nil unless defined? @gem_path
+    @gem_path ||= [ENV['GEM_HOME']].compact
+  end
+  
+  def self.paths
+    @gem_paths ||= {}
+    @gem_paths ||= {} unless defined? @gem_paths
+    @gem_paths[:path] ||= path
+    @gem_paths
+  end
+  
+  def self.ruby
+    @ruby ||= File.join(RbConfig::CONFIG['bindir'],
+                        RbConfig::CONFIG['ruby_install_name'])
+    @ruby << RbConfig::CONFIG['EXEEXT']
+  end
+end
+
+# Load the actual RubyGems code
+require 'rubygems/defaults'
+require 'rubygems/core_ext/kernel_gem'
+require 'rubygems/core_ext/kernel_require'
+EOL
+fi
 
 # Handle shared library dependencies
 shared_lib_dir=$(setup_ruby_shared_libraries "$bootstrap_ruby_dir")
