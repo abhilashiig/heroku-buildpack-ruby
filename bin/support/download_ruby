@@ -63,7 +63,22 @@ echo "Download complete. File size: $(ls -l "$RUBY_BOOTSTRAP_DIR/ruby.tgz" | awk
 echo "Extracting Ruby to: $RUBY_BOOTSTRAP_DIR"
 tar xzf "$RUBY_BOOTSTRAP_DIR/ruby.tgz" -C "$RUBY_BOOTSTRAP_DIR"
 echo "Moving Ruby files to correct location"
-mv "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6"/* "$RUBY_BOOTSTRAP_DIR/"
-rmdir "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6"
+if [ -d "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6" ]; then
+  # First, ensure we have write permissions
+  chmod -R u+w "$RUBY_BOOTSTRAP_DIR"
+  
+  # Move all files including hidden ones
+  cp -a "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6"/. "$RUBY_BOOTSTRAP_DIR/"
+  
+  # Remove the source directory
+  rm -rf "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6"
+  
+  # Ensure bin directory exists and has correct permissions
+  mkdir -p "$RUBY_BOOTSTRAP_DIR/bin"
+  chmod -R u+x "$RUBY_BOOTSTRAP_DIR/bin"
+fi
+
 echo "Extraction complete. Contents of $RUBY_BOOTSTRAP_DIR:"
 ls -la "$RUBY_BOOTSTRAP_DIR"
+echo "Contents of bin directory:"
+ls -la "$RUBY_BOOTSTRAP_DIR/bin" || true
