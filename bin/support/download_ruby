@@ -77,35 +77,68 @@ echo "Download complete. File size: $(ls -l "$RUBY_BOOTSTRAP_DIR/ruby.tgz" | awk
 echo "Extracting Ruby to: $RUBY_BOOTSTRAP_DIR"
 tar xzf "$RUBY_BOOTSTRAP_DIR/ruby.tgz" -C "$RUBY_BOOTSTRAP_DIR"
 echo "Moving Ruby files to correct location"
+# First, ensure we have write permissions
+chmod -R u+w "$RUBY_BOOTSTRAP_DIR"
+
+# Check if the tarball extracted with a ruby-2.6.6 directory structure
 if [ -d "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6" ]; then
-  # First, ensure we have write permissions
-  chmod -R u+w "$RUBY_BOOTSTRAP_DIR"
-  
+  echo "Found ruby-2.6.6 directory structure, moving files..."
   # Move all files including hidden ones
   cp -a "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6"/. "$RUBY_BOOTSTRAP_DIR/"
   
   # Remove the source directory
   rm -rf "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6"
+elif [ -d "$RUBY_BOOTSTRAP_DIR/bin" ] && [ -f "$RUBY_BOOTSTRAP_DIR/bin/ruby" ]; then
+  echo "Ruby files already in correct location"
+else
+  echo "Searching for Ruby binary in extracted contents..."
+  # Try to find ruby binary in the extracted contents
+  RUBY_BIN=$(find "$RUBY_BOOTSTRAP_DIR" -name ruby -type f -executable | head -1)
   
-  # Ensure bin directory exists and has correct permissions
-  mkdir -p "$RUBY_BOOTSTRAP_DIR/bin"
-  chmod -R u+x "$RUBY_BOOTSTRAP_DIR/bin"
-  
-  # Set up library path
-  export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$RUBY_BOOTSTRAP_DIR/lib"
-  
-  # Verify Ruby binary
-  if [ -f "$RUBY_BOOTSTRAP_DIR/bin/ruby" ]; then
-    echo "Ruby binary found. Setting permissions..."
-    chmod 755 "$RUBY_BOOTSTRAP_DIR/bin/ruby"
-    echo "Verifying Ruby binary..."
-    file "$RUBY_BOOTSTRAP_DIR/bin/ruby"
-    echo "Testing Ruby binary..."
-    LD_LIBRARY_PATH="$RUBY_BOOTSTRAP_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$RUBY_BOOTSTRAP_DIR/bin/ruby" -v || echo "Ruby binary test failed"
+  if [ -n "$RUBY_BIN" ]; then
+    echo "Found Ruby binary at: $RUBY_BIN"
+    # Get the directory containing the ruby binary
+    RUBY_BIN_DIR=$(dirname "$RUBY_BIN")
+    RUBY_ROOT_DIR=$(dirname "$RUBY_BIN_DIR")
+    
+    if [ "$RUBY_ROOT_DIR" != "$RUBY_BOOTSTRAP_DIR" ]; then
+      echo "Moving Ruby files from $RUBY_ROOT_DIR to $RUBY_BOOTSTRAP_DIR"
+      cp -a "$RUBY_ROOT_DIR"/. "$RUBY_BOOTSTRAP_DIR/"
+      rm -rf "$RUBY_ROOT_DIR"
+    fi
   else
-    echo "ERROR: Ruby binary not found in expected location"
+    echo "ERROR: Could not find Ruby binary in extracted contents"
+    echo "Extracted contents structure:"
+    find "$RUBY_BOOTSTRAP_DIR" -type f | sort
     exit 1
   fi
+fi
+
+# Ensure bin directory exists and has correct permissions
+mkdir -p "$RUBY_BOOTSTRAP_DIR/bin"
+chmod -R u+x "$RUBY_BOOTSTRAP_DIR/bin"
+
+# Set up library path
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$RUBY_BOOTSTRAP_DIR/lib"
+
+# Verify Ruby binary
+if [ -f "$RUBY_BOOTSTRAP_DIR/bin/ruby" ]; then
+  echo "Ruby binary found. Setting permissions..."
+  chmod 755 "$RUBY_BOOTSTRAP_DIR/bin/ruby"
+  echo "Verifying Ruby binary..."
+  file "$RUBY_BOOTSTRAP_DIR/bin/ruby"
+  echo "Testing Ruby binary..."
+  LD_LIBRARY_PATH="$RUBY_BOOTSTRAP_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$RUBY_BOOTSTRAP_DIR/bin/ruby" -v || {
+    echo "Ruby binary test failed. This could be due to missing dependencies or incompatible binary."
+    echo "Checking shared library dependencies:"
+    ldd "$RUBY_BOOTSTRAP_DIR/bin/ruby" || echo "ldd command not available"
+    exit 1
+  }
+else
+  echo "ERROR: Ruby binary not found at expected location: $RUBY_BOOTSTRAP_DIR/bin/ruby"
+  echo "Contents of $RUBY_BOOTSTRAP_DIR:"
+  find "$RUBY_BOOTSTRAP_DIR" -type f -name "ruby" | sort
+  exit 1
 fi
 
 echo "Extraction complete. Contents of $RUBY_BOOTSTRAP_DIR:"
