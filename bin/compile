@@ -276,8 +276,55 @@ EOF
   echo "Created minimal rubygems.rb at $bootstrap_ruby_dir/rubygems.rb"
 fi
 
+# Create a direct copy of rubygems.rb in the Ruby load path
+echo "Creating a direct copy of rubygems.rb in the Ruby load path directories"
+for ruby_lib_dir in "$bootstrap_ruby_dir/lib" "$bootstrap_ruby_dir"; do
+  if [ -f "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb" ]; then
+    cp "$bootstrap_ruby_dir/lib/ruby/2.6.0/rubygems.rb" "$ruby_lib_dir/rubygems.rb"
+    echo "Created copy of rubygems.rb at $ruby_lib_dir/rubygems.rb"
+  elif [ -f "$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0/rubygems.rb" ]; then
+    cp "$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0/rubygems.rb" "$ruby_lib_dir/rubygems.rb"
+    echo "Created copy of rubygems.rb at $ruby_lib_dir/rubygems.rb"
+  else
+    # Create a minimal rubygems.rb file directly in the load path
+    cat > "$ruby_lib_dir/rubygems.rb" << 'EOF'
+# Minimal RubyGems implementation
+module Gem
+  VERSION = "3.0.3"
+  
+  class LoadError < ::LoadError
+  end
+  
+  def self.path
+    @gem_path ||= [ENV['GEM_HOME']].compact
+  end
+  
+  def self.paths
+    @gem_paths ||= {}
+    @gem_paths[:path] ||= path
+    @gem_paths
+  end
+  
+  def self.ruby
+    @ruby ||= File.join(RbConfig::CONFIG['bindir'],
+                        RbConfig::CONFIG['ruby_install_name'])
+    @ruby << RbConfig::CONFIG['EXEEXT']
+  end
+end
+EOF
+    echo "Created minimal rubygems.rb at $ruby_lib_dir/rubygems.rb"
+  fi
+done
+
 # Modify the Ruby command to include the root directory in RUBYLIB
 echo "Executing Ruby with modified RUBYLIB to include root directory"
+LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib/shared:$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+  PATH="$bootstrap_ruby_dir/bin:$PATH" \
+  GEM_HOME="$bootstrap_ruby_dir/lib/ruby/gems/2.6.0" \
+  RUBYLIB="$bootstrap_ruby_dir:$bootstrap_ruby_dir/lib:$bootstrap_ruby_dir/lib/ruby:$bootstrap_ruby_dir/lib/ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/2.6.0/x86_64-linux:$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0" \
+  "$bootstrap_ruby_dir/bin/ruby" -e "puts 'Testing Ruby load path for rubygems.rb:'; puts \$:.join(\"\\n\"); puts 'Attempting to require rubygems:'; begin; require 'rubygems'; puts 'Successfully loaded rubygems'; rescue LoadError => e; puts 'Failed to load rubygems: ' + e.message; end" || true
+
+# Now run the actual command
 LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib/shared:$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   PATH="$bootstrap_ruby_dir/bin:$PATH" \
   GEM_HOME="$bootstrap_ruby_dir/lib/ruby/gems/2.6.0" \
