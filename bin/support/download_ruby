@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
+# Print system information
+echo "System Information:"
+echo "------------------"
+echo "OS: $(uname -a)"
+echo "Architecture: $(uname -m)"
+echo "Kernel: $(uname -r)"
+echo "------------------"
+
 # Downloads a bootstrap copy of Ruby for execution of the buildpack
 # this is needed so we can totally control the Ruby version and are
 # not dependant on the Ruby version of the stack image
@@ -78,7 +86,7 @@ if [ -d "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6" ]; then
   chmod -R u+x "$RUBY_BOOTSTRAP_DIR/bin"
   
   # Set up library path
-  export LD_LIBRARY_PATH="$RUBY_BOOTSTRAP_DIR/lib:$LD_LIBRARY_PATH"
+  export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$RUBY_BOOTSTRAP_DIR/lib"
   
   # Verify Ruby binary
   if [ -f "$RUBY_BOOTSTRAP_DIR/bin/ruby" ]; then
@@ -87,7 +95,7 @@ if [ -d "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6" ]; then
     echo "Verifying Ruby binary..."
     file "$RUBY_BOOTSTRAP_DIR/bin/ruby"
     echo "Testing Ruby binary..."
-    LD_LIBRARY_PATH="$RUBY_BOOTSTRAP_DIR/lib" "$RUBY_BOOTSTRAP_DIR/bin/ruby" -v || echo "Ruby binary test failed"
+    LD_LIBRARY_PATH="$RUBY_BOOTSTRAP_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$RUBY_BOOTSTRAP_DIR/bin/ruby" -v || echo "Ruby binary test failed"
   else
     echo "ERROR: Ruby binary not found in expected location"
     exit 1
