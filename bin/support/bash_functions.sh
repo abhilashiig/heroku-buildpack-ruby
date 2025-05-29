@@ -47,9 +47,9 @@ install_bootstrap_ruby()
     # Use a more persistent directory instead of mktemp
     mkdir -p "$heroku_buildpack_ruby_dir"
     
-    # bootstrap ruby
-    if ! "$bin_dir"/support/download_ruby "$bin_dir" "$heroku_buildpack_ruby_dir"; then
-      echo "Failed to download and extract Ruby. Cleaning up and exiting."
+    # bootstrap ruby - redirect all output to stderr to avoid it being captured in the return value
+    if ! "$bin_dir"/support/download_ruby "$bin_dir" "$heroku_buildpack_ruby_dir" 1>&2; then
+      echo "Failed to download and extract Ruby. Cleaning up and exiting." 1>&2
       rm -rf "$heroku_buildpack_ruby_dir"
       exit 1
     fi
@@ -57,17 +57,18 @@ install_bootstrap_ruby()
 
   # Verify the Ruby binary exists and is executable before returning
   if [ ! -f "$heroku_buildpack_ruby_dir/bin/ruby" ]; then
-    echo "ERROR: Ruby binary not found at $heroku_buildpack_ruby_dir/bin/ruby after bootstrap"
-    echo "Contents of directory:"
-    find "$heroku_buildpack_ruby_dir" -type f -name "ruby" | sort
+    echo "ERROR: Ruby binary not found at $heroku_buildpack_ruby_dir/bin/ruby after bootstrap" 1>&2
+    echo "Contents of directory:" 1>&2
+    find "$heroku_buildpack_ruby_dir" -type f -name "ruby" | sort 1>&2
     exit 1
   fi
 
   if [ ! -x "$heroku_buildpack_ruby_dir/bin/ruby" ]; then
-    echo "Ruby binary found but not executable. Setting permissions..."
+    echo "Ruby binary found but not executable. Setting permissions..." 1>&2
     chmod +x "$heroku_buildpack_ruby_dir/bin/ruby"
   fi
 
+  # Only output the directory path, nothing else
   echo "$heroku_buildpack_ruby_dir"
 }
 
