@@ -19,6 +19,19 @@ export PATH="$bootstrap_ruby_dir/bin:$PATH"
 export LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 unset GEM_PATH
 
+# Ensure the Ruby binary is accessible
+if [ ! -f "$bootstrap_ruby_dir/bin/ruby" ]; then
+  echo "ERROR: Ruby binary not found at $bootstrap_ruby_dir/bin/ruby"
+  echo "Contents of directory:"
+  find "$bootstrap_ruby_dir" -type f -name "ruby" | sort
+  exit 1
+fi
+
+if [ ! -x "$bootstrap_ruby_dir/bin/ruby" ]; then
+  echo "Ruby binary found but not executable. Setting permissions..."
+  chmod +x "$bootstrap_ruby_dir/bin/ruby"
+fi
+
 echo "Verifying Ruby environment:"
 echo "------------------------"
 echo "Ruby binary location: $bootstrap_ruby_dir/bin/ruby"
@@ -46,4 +59,14 @@ EOM
 fi
 
 echo "Running ruby_compile with Ruby from: $bootstrap_ruby_dir/bin/ruby"
-"$bootstrap_ruby_dir/bin/ruby" "$BIN_DIR/support/ruby_compile" "$@"
+
+# Verify Ruby binary exists and is executable right before execution
+if [ ! -f "$bootstrap_ruby_dir/bin/ruby" ]; then
+  echo "ERROR: Ruby binary not found at $bootstrap_ruby_dir/bin/ruby before execution"
+  exit 1
+fi
+
+# Execute Ruby with explicit environment variables to ensure library paths are set correctly
+LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+  PATH="$bootstrap_ruby_dir/bin:$PATH" \
+  "$bootstrap_ruby_dir/bin/ruby" "$BIN_DIR/support/ruby_compile" "$@"
