@@ -104,28 +104,80 @@ setup_ruby_shared_libraries()
   local shared_lib_dir="$ruby_dir/lib/shared"
   echo "Setting up shared library dependencies in $shared_lib_dir..." 1>&2
   mkdir -p "$shared_lib_dir"
+  
+  # Print system library information for debugging
+  echo "System library information:" 1>&2
+  echo "---------------------------" 1>&2
+  echo "Stack: $STACK" 1>&2
+  echo "Available libcrypto files:" 1>&2
+  find /lib /usr/lib /usr/lib64 -name "libcrypto*" 2>/dev/null | sort 1>&2
+  echo "Available libssl files:" 1>&2
+  find /lib /usr/lib /usr/lib64 -name "libssl*" 2>/dev/null | sort 1>&2
+  echo "---------------------------" 1>&2
+  
+  # Enhanced library mappings with more fallback options
   local lib_mappings=(
-    "libcrypto.so.1.0.0:/usr/lib/x86_64-linux-gnu/libcrypto.so.3:/lib/x86_64-linux-gnu/libcrypto.so.1.1:/usr/lib64/libcrypto.so.1.1"
-    "libssl.so.1.0.0:/usr/lib/x86_64-linux-gnu/libssl.so.3:/lib/x86_64-linux-gnu/libssl.so.1.1:/usr/lib64/libssl.so.1.1"
-    "libreadline.so.6:/usr/lib/x86_64-linux-gnu/libreadline.so.8:/lib/x86_64-linux-gnu/libreadline.so.7:/usr/lib64/libreadline.so.7"
+    "libcrypto.so.1.0.0:/usr/lib/x86_64-linux-gnu/libcrypto.so.3:/lib/x86_64-linux-gnu/libcrypto.so.1.1:/usr/lib64/libcrypto.so.1.1:/usr/lib/x86_64-linux-gnu/libcrypto.so:/lib/x86_64-linux-gnu/libcrypto.so"
+    "libssl.so.1.0.0:/usr/lib/x86_64-linux-gnu/libssl.so.3:/lib/x86_64-linux-gnu/libssl.so.1.1:/usr/lib64/libssl.so.1.1:/usr/lib/x86_64-linux-gnu/libssl.so:/lib/x86_64-linux-gnu/libssl.so"
+    "libreadline.so.6:/usr/lib/x86_64-linux-gnu/libreadline.so.8:/lib/x86_64-linux-gnu/libreadline.so.7:/usr/lib64/libreadline.so.7:/usr/lib/x86_64-linux-gnu/libreadline.so:/lib/x86_64-linux-gnu/libreadline.so"
   )
+  
+  # Create a file to track which libraries were successfully linked
+  echo "Library symlink status:" > "$shared_lib_dir/library_status.txt"
+  
   for mapping in "${lib_mappings[@]}"; do
-    IFS=':' read -r target_lib source_lib1 source_lib2 source_lib3 <<< "$mapping"
+    IFS=':' read -r target_lib source_lib1 source_lib2 source_lib3 source_lib4 source_lib5 <<< "$mapping"
     if [ -f "$source_lib1" ]; then
       ln -sf "$source_lib1" "$shared_lib_dir/$target_lib"
       echo "Created symlink for $target_lib -> $source_lib1" 1>&2
+      echo "$target_lib: OK (linked to $source_lib1)" >> "$shared_lib_dir/library_status.txt"
     elif [ -f "$source_lib2" ]; then
       ln -sf "$source_lib2" "$shared_lib_dir/$target_lib"
       echo "Created symlink for $target_lib -> $source_lib2" 1>&2
+      echo "$target_lib: OK (linked to $source_lib2)" >> "$shared_lib_dir/library_status.txt"
     elif [ -f "$source_lib3" ]; then
       ln -sf "$source_lib3" "$shared_lib_dir/$target_lib"
       echo "Created symlink for $target_lib -> $source_lib3" 1>&2
+      echo "$target_lib: OK (linked to $source_lib3)" >> "$shared_lib_dir/library_status.txt"
+    elif [ -f "$source_lib4" ]; then
+      ln -sf "$source_lib4" "$shared_lib_dir/$target_lib"
+      echo "Created symlink for $target_lib -> $source_lib4" 1>&2
+      echo "$target_lib: OK (linked to $source_lib4)" >> "$shared_lib_dir/library_status.txt"
+    elif [ -f "$source_lib5" ]; then
+      ln -sf "$source_lib5" "$shared_lib_dir/$target_lib"
+      echo "Created symlink for $target_lib -> $source_lib5" 1>&2
+      echo "$target_lib: OK (linked to $source_lib5)" >> "$shared_lib_dir/library_status.txt"
     else
       echo "WARNING: Could not find a suitable library for $target_lib" 1>&2
+      echo "$target_lib: MISSING" >> "$shared_lib_dir/library_status.txt"
+      
+      # Try to find any version of the library and use it as a last resort
       target_prefix=$(echo "$target_lib" | cut -d'.' -f1)
-      find /lib /usr/lib /usr/lib64 -name "${target_prefix}*" 2>/dev/null | head -5 || echo "No ${target_prefix}* found" 1>&2
+      potential_lib=$(find /lib /usr/lib /usr/lib64 -name "${target_prefix}*.so*" 2>/dev/null | head -1)
+      
+      if [ -n "$potential_lib" ] && [ -f "$potential_lib" ]; then
+        echo "Found alternative library: $potential_lib" 1>&2
+        ln -sf "$potential_lib" "$shared_lib_dir/$target_lib"
+        echo "Created fallback symlink for $target_lib -> $potential_lib" 1>&2
+        echo "$target_lib: FALLBACK (linked to $potential_lib)" >> "$shared_lib_dir/library_status.txt"
+      else
+        # If we still can't find a suitable library, create an empty file as a placeholder
+        # This prevents the same warning from being printed multiple times
+        touch "$shared_lib_dir/$target_lib.missing"
+        echo "Created placeholder for missing library: $target_lib" 1>&2
+        
+        # List available libraries for debugging
+        echo "Available alternatives for $target_prefix:" 1>&2
+        find /lib /usr/lib /usr/lib64 -name "${target_prefix}*" 2>/dev/null | sort | head -5 || echo "No ${target_prefix}* found" 1>&2
+      fi
     fi
   done
+  
+  # Print library status
+  echo "Library symlink status summary:" 1>&2
+  cat "$shared_lib_dir/library_status.txt" 1>&2
+  echo "---------------------------" 1>&2
+  
   echo "$shared_lib_dir"
 }
 
