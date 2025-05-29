@@ -23,6 +23,12 @@ export GEM_HOME="$bootstrap_ruby_dir/lib/ruby/gems/2.6.0"
 export RUBYLIB="$bootstrap_ruby_dir/lib/ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/2.6.0/x86_64-linux:$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0"
 unset GEM_PATH
 
+# Handle shared library dependencies
+shared_lib_dir=$(setup_ruby_shared_libraries "$bootstrap_ruby_dir")
+
+# Add the shared lib directory to LD_LIBRARY_PATH
+export LD_LIBRARY_PATH="$shared_lib_dir:$LD_LIBRARY_PATH"
+
 # Ensure the Ruby binary is accessible
 if [ ! -f "$bootstrap_ruby_dir/bin/ruby" ]; then
   echo "ERROR: Ruby binary not found at $bootstrap_ruby_dir/bin/ruby"
@@ -75,7 +81,7 @@ if [ ! -f "$bootstrap_ruby_dir/bin/ruby" ]; then
 fi
 
 # Execute Ruby with explicit environment variables to ensure library paths are set correctly
-LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib/shared:$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   PATH="$bootstrap_ruby_dir/bin:$PATH" \
   GEM_HOME="$bootstrap_ruby_dir/lib/ruby/gems/2.6.0" \
   RUBYLIB="$bootstrap_ruby_dir/lib/ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/2.6.0/x86_64-linux:$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0" \

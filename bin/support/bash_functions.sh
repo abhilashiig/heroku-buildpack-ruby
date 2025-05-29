@@ -99,6 +99,49 @@ detect_needs_java()
 #
 #   compile_buildpack_v2 "$build_dir" "$cache_dir" "$env_dir" "https://buildpack-registry.s3.us-east-1.amazonaws.com/buildpacks/heroku/nodejs.tgz" "heroku/nodejs"
 #
+# This function sets up the necessary shared library symlinks for Ruby
+# It handles different versions of libraries across different stacks
+setup_ruby_shared_libraries()
+{
+  local ruby_dir=$1
+  local shared_lib_dir="$ruby_dir/lib/shared"
+  
+  echo "Setting up shared library dependencies..." 1>&2
+  
+  # Create a lib directory for shared libraries if it doesn't exist
+  mkdir -p "$shared_lib_dir"
+  
+  # Define an array of libraries to check and create symlinks for
+  local lib_mappings=(
+    "libcrypto.so.1.0.0:/usr/lib/x86_64-linux-gnu/libcrypto.so.3:/lib/x86_64-linux-gnu/libcrypto.so.1.1:/usr/lib64/libcrypto.so.1.1"
+    "libssl.so.1.0.0:/usr/lib/x86_64-linux-gnu/libssl.so.3:/lib/x86_64-linux-gnu/libssl.so.1.1:/usr/lib64/libssl.so.1.1"
+    "libreadline.so.6:/usr/lib/x86_64-linux-gnu/libreadline.so.8:/lib/x86_64-linux-gnu/libreadline.so.7:/usr/lib64/libreadline.so.7"
+  )
+  
+  for mapping in "${lib_mappings[@]}"; do
+    IFS=':' read -r target_lib source_lib1 source_lib2 source_lib3 <<< "$mapping"
+    
+    if [ -f "$source_lib1" ]; then
+      ln -sf "$source_lib1" "$shared_lib_dir/$target_lib"
+      echo "Created symlink for $target_lib -> $source_lib1" 1>&2
+    elif [ -f "$source_lib2" ]; then
+      ln -sf "$source_lib2" "$shared_lib_dir/$target_lib"
+      echo "Created symlink for $target_lib -> $source_lib2" 1>&2
+    elif [ -f "$source_lib3" ]; then
+      ln -sf "$source_lib3" "$shared_lib_dir/$target_lib"
+      echo "Created symlink for $target_lib -> $source_lib3" 1>&2
+    else
+      echo "WARNING: Could not find a suitable library for $target_lib" 1>&2
+      # Search for similar libraries to help with debugging
+      target_prefix=$(echo "$target_lib" | cut -d'.' -f1)
+      find /lib /usr/lib /usr/lib64 -name "${target_prefix}*" 2>/dev/null | head -5 || echo "No ${target_prefix}* found" 1>&2
+    fi
+  done
+  
+  # Return the path to the shared lib directory
+  echo "$shared_lib_dir"
+}
+
 compile_buildpack_v2()
 {
   local build_dir=$1
