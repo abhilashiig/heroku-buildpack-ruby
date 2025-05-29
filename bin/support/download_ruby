@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 
 # Print system information
-echo "System Information:"
-echo "------------------"
-echo "OS: $(uname -a)"
-echo "Architecture: $(uname -m)"
-echo "Kernel: $(uname -r)"
-if [ -f /etc/os-release ]; then
-  echo "Ubuntu Version: $(grep VERSION_ID /etc/os-release | cut -d'"' -f2)"
-  echo "Distribution: $(grep PRETTY_NAME /etc/os-release | cut -d'"' -f2)"
-fi
-echo "------------------"
+{
+  echo "System Information:"
+  echo "------------------"
+  echo "OS: $(uname -a)"
+  echo "Architecture: $(uname -m)"
+  echo "Kernel: $(uname -r)"
+  if [ -f /etc/os-release ]; then
+    echo "Ubuntu Version: $(grep VERSION_ID /etc/os-release | cut -d'"' -f2)"
+    echo "Distribution: $(grep PRETTY_NAME /etc/os-release | cut -d'"' -f2)"
+  fi
+  echo "------------------"
+} >&2
 
 # Downloads a bootstrap copy of Ruby for execution of the buildpack
 # this is needed so we can totally control the Ruby version and are
