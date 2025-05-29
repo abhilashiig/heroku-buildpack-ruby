@@ -2,7 +2,7 @@
 
 The [Ruby Buildpack](https://devcenter.heroku.com/articles/ruby-support#libraries) now installs a version of bundler based on the major and minor version listed in the `Gemfile.lock` under the `BUNDLED WITH` key. Previously, it only used the major version. Now, this logic will be used:
 
-- `BUNDLED WITH` 1.x will receive bundler `1.17.3`
+- `BUNDLED WITH` 1.x will receive bundler `2.3.25`
 - `BUNDLED WITH` 2.0.x to 2.3.x will receive bundler `2.3.25`
 - `BUNDLED WITH` 2.4.x will receive bundler `2.4.22`
 - `BUNDLED WITH` 2.5.x and above will receive bundler `2.5.6`
