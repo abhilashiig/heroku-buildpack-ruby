@@ -123,10 +123,8 @@ class LanguagePack::Helpers::BundlerWrapper
       # decisions
       "ruby.dot_ruby_version" => dot_ruby_version_file.exist? ? dot_ruby_version_file.read&.strip : nil
     )
-    @version = self.class.detect_bundler_version(
-      contents: contents,
-      bundled_with: bundled_with
-    )
+    # Hardcode bundler version to 1.17.3
+    @version = "1.17.3"
     parts = @version.split(".")
     @report.capture(
       "bundler.version_installed" => @version,
@@ -255,7 +253,9 @@ class LanguagePack::Helpers::BundlerWrapper
     # - doc
     FileUtils.mkdir_p(bundler_path)
     Dir.chdir(bundler_path) do
-      @fetcher.fetch_untar(@bundler_tar)
+      # Hardcoded URL for bundler 1.17.3
+      hardcoded_url = "https://heroku-buildpack-ruby.s3.us-east-1.amazonaws.com/bundler/bundler-1.17.3.tgz"
+      run!("curl -L --fail --retry 5 --retry-delay 1 --connect-timeout 3 --max-time 30 #{hardcoded_url} -s -o - | tar --strip-components=0 -xzf -")
     end
     Dir["bin/*"].each {|path| `chmod 755 #{path}` }
   end
