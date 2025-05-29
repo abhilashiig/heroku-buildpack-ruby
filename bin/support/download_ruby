@@ -29,13 +29,7 @@ ruby_url() {
   local stack=$1
   local version=$2
 
-  if [ "$stack" == "heroku-24" ]; then
-    local arch
-    arch=$(dpkg --print-architecture)
-    echo "${BUILDPACK_VENDOR_URL:-https://heroku-buildpack-ruby.s3.us-east-1.amazonaws.com}/$stack/$arch/ruby-$version.tgz"
-  else
-    echo "${BUILDPACK_VENDOR_URL:-https://heroku-buildpack-ruby.s3.us-east-1.amazonaws.com}/$stack/ruby-$version.tgz"
-  fi
+  echo "https://heroku-buildpack-ruby.s3.us-east-1.amazonaws.com/heroku-20/ruby-$version.tgz"
 }
 
 # Pull ruby version out of buildpack.toml to be used with bootstrapping
