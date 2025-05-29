@@ -62,5 +62,8 @@ EOF
 echo "Download complete. File size: $(ls -l "$RUBY_BOOTSTRAP_DIR/ruby.tgz" | awk '{print $5}') bytes"
 echo "Extracting Ruby to: $RUBY_BOOTSTRAP_DIR"
 tar xzf "$RUBY_BOOTSTRAP_DIR/ruby.tgz" -C "$RUBY_BOOTSTRAP_DIR"
+echo "Moving Ruby files to correct location"
+mv "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6"/* "$RUBY_BOOTSTRAP_DIR/"
+rmdir "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6"
 echo "Extraction complete. Contents of $RUBY_BOOTSTRAP_DIR:"
 ls -la "$RUBY_BOOTSTRAP_DIR"
