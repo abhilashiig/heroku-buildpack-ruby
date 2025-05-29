@@ -17,6 +17,10 @@ bootstrap_ruby_dir=$(install_bootstrap_ruby "$BIN_DIR" "$BUILDPACK_DIR")
 # Set up environment variables
 export PATH="$bootstrap_ruby_dir/bin:$PATH"
 export LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# Set up RubyGems environment
+export GEM_HOME="$bootstrap_ruby_dir/lib/ruby/gems/2.6.0"
+export RUBYLIB="$bootstrap_ruby_dir/lib/ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/2.6.0/x86_64-linux:$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0"
 unset GEM_PATH
 
 # Ensure the Ruby binary is accessible
@@ -36,9 +40,13 @@ echo "Verifying Ruby environment:"
 echo "------------------------"
 echo "Ruby binary location: $bootstrap_ruby_dir/bin/ruby"
 echo "Library path: $LD_LIBRARY_PATH"
+echo "GEM_HOME: $GEM_HOME"
+echo "RUBYLIB: $RUBYLIB"
 echo "PATH: $PATH"
 echo "Testing Ruby binary:"
 "$bootstrap_ruby_dir/bin/ruby" -v
+echo "Checking Ruby installation structure:"
+find "$bootstrap_ruby_dir/lib/ruby" -type d | sort
 echo "------------------------"
 
 if detect_needs_java "$BUILD_DIR"; then
@@ -69,4 +77,6 @@ fi
 # Execute Ruby with explicit environment variables to ensure library paths are set correctly
 LD_LIBRARY_PATH="$bootstrap_ruby_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   PATH="$bootstrap_ruby_dir/bin:$PATH" \
+  GEM_HOME="$bootstrap_ruby_dir/lib/ruby/gems/2.6.0" \
+  RUBYLIB="$bootstrap_ruby_dir/lib/ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/2.6.0/x86_64-linux:$bootstrap_ruby_dir/lib/ruby/site_ruby/2.6.0:$bootstrap_ruby_dir/lib/ruby/vendor_ruby/2.6.0" \
   "$bootstrap_ruby_dir/bin/ruby" "$BIN_DIR/support/ruby_compile" "$@"

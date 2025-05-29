@@ -152,3 +152,35 @@ log "Contents of bin directory:"
 ls -la "$RUBY_BOOTSTRAP_DIR/bin" >&2 || true
 log "Contents of lib directory:"
 ls -la "$RUBY_BOOTSTRAP_DIR/lib" >&2 || true
+
+# Verify RubyGems files are present
+log "Verifying RubyGems installation:"
+if [ -d "$RUBY_BOOTSTRAP_DIR/lib/ruby" ]; then
+  log "Ruby lib directory found"
+  find "$RUBY_BOOTSTRAP_DIR/lib/ruby" -name "rubygems*" -o -name "gems" | sort >&2
+  
+  # Create necessary directories if they don't exist
+  mkdir -p "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0"
+  mkdir -p "$RUBY_BOOTSTRAP_DIR/lib/ruby/site_ruby/2.6.0"
+  mkdir -p "$RUBY_BOOTSTRAP_DIR/lib/ruby/vendor_ruby/2.6.0"
+  mkdir -p "$RUBY_BOOTSTRAP_DIR/lib/ruby/gems/2.6.0"
+  
+  # If rubygems.rb is missing, create a minimal version
+  if [ ! -f "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems.rb" ]; then
+    log "Creating minimal rubygems.rb file"
+    cat > "$RUBY_BOOTSTRAP_DIR/lib/ruby/2.6.0/rubygems.rb" << 'EOF'
+# Minimal RubyGems stub to allow Ruby to start
+module Gem
+  def self.path
+    @gem_path ||= []
+  end
+  
+  def self.path=(paths)
+    @gem_path = Array(paths)
+  end
+end
+EOF
+  fi
+else
+  log "WARNING: Ruby lib directory not found. RubyGems may not work correctly."
+fi
