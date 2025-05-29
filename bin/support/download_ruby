@@ -6,6 +6,10 @@ echo "------------------"
 echo "OS: $(uname -a)"
 echo "Architecture: $(uname -m)"
 echo "Kernel: $(uname -r)"
+if [ -f /etc/os-release ]; then
+  echo "Ubuntu Version: $(grep VERSION_ID /etc/os-release | cut -d'"' -f2)"
+  echo "Distribution: $(grep PRETTY_NAME /etc/os-release | cut -d'"' -f2)"
+fi
 echo "------------------"
 
 # Downloads a bootstrap copy of Ruby for execution of the buildpack
