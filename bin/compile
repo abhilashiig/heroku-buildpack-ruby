@@ -191,34 +191,94 @@ fi
 EOF
 chmod +x "$BUILD_DIR/.profile.d/ruby.sh"
 
-# Also create a script for the release phase
-echo "-----> Creating release phase script"
-mkdir -p "$BUILD_DIR/.heroku/bin"
-cat > "$BUILD_DIR/.heroku/bin/release" << EOF
+# Create system-wide wrappers that will be found in PATH
+echo "-----> Creating system-wide wrappers for Ruby commands"
+
+# Create bin directory in the app that will be in PATH
+mkdir -p "$BUILD_DIR/bin"
+
+# Create a wrapper for the bundle command
+cat > "$BUILD_DIR/bin/bundle" << EOF
 #!/bin/bash
 # Source the Ruby environment setup
 source "$BUILD_DIR/.profile.d/ruby.sh"
 
 # Debug info
-echo "[DEBUG] Release phase: PATH=\$PATH"
-echo "[DEBUG] Release phase: which ruby=\$(which ruby 2>/dev/null || echo 'ruby not found')"
-echo "[DEBUG] Release phase: which bundle=\$(which bundle 2>/dev/null || echo 'bundle not found')"
+echo "[DEBUG] Bundle wrapper: PATH=\$PATH"
+echo "[DEBUG] Bundle wrapper: RUBYLIB=\$RUBYLIB"
+echo "[DEBUG] Bundle wrapper: LD_LIBRARY_PATH=\$LD_LIBRARY_PATH"
 
-# Run the original release command
-exec "\$@"
+# Run the bundle command with the Ruby from our environment
+if [ -x "$RUBY_PATH/bin/bundle" ]; then
+  echo "[DEBUG] Using bundle from $RUBY_PATH/bin/bundle"
+  exec "$RUBY_PATH/bin/bundle" "\$@"
+else
+  echo "[ERROR] Bundle not found at $RUBY_PATH/bin/bundle"
+  # Try to install bundler
+  echo "[DEBUG] Attempting to install bundler"
+  "$RUBY_PATH/bin/gem" install bundler --no-document
+  if [ -x "$RUBY_PATH/bin/bundle" ]; then
+    echo "[DEBUG] Bundler installed successfully"
+    exec "$RUBY_PATH/bin/bundle" "\$@"
+  else
+    echo "[ERROR] Failed to install bundler"
+    exit 1
+  fi
+fi
 EOF
-chmod +x "$BUILD_DIR/.heroku/bin/release"
+chmod +x "$BUILD_DIR/bin/bundle"
 
-# Create a wrapper for bundle command
-cat > "$BUILD_DIR/.heroku/bin/bundle" << EOF
+# Create a wrapper for the ruby command
+cat > "$BUILD_DIR/bin/ruby" << EOF
 #!/bin/bash
 # Source the Ruby environment setup
 source "$BUILD_DIR/.profile.d/ruby.sh"
 
-# Run the bundle command with the Ruby from our environment
-"$RUBY_PATH/bin/bundle" "\$@"
+# Run the ruby command with our environment
+exec "$RUBY_PATH/bin/ruby" "\$@"
 EOF
-chmod +x "$BUILD_DIR/.heroku/bin/bundle"
+chmod +x "$BUILD_DIR/bin/ruby"
+
+# Create a wrapper for the gem command
+cat > "$BUILD_DIR/bin/gem" << EOF
+#!/bin/bash
+# Source the Ruby environment setup
+source "$BUILD_DIR/.profile.d/ruby.sh"
+
+# Run the gem command with our environment
+exec "$RUBY_PATH/bin/gem" "\$@"
+EOF
+chmod +x "$BUILD_DIR/bin/gem"
+
+# Install bundler if it's not already installed
+if [ ! -x "$RUBY_PATH/bin/bundle" ]; then
+  echo "-----> Installing bundler"
+  "$RUBY_PATH/bin/gem" install bundler --no-document
+fi
+
+# Test that bundle works
+echo "-----> Testing bundle command"
+"$BUILD_DIR/bin/bundle" --version || echo "[WARNING] Bundle command test failed"
+
+# Create a .profile script that will run before any process
+cat > "$BUILD_DIR/.profile" << EOF
+#!/bin/bash
+# This script runs before any process, including release phase
+
+# Add our bin directory to the front of PATH
+export PATH="\$HOME/bin:\$PATH"
+
+# Source the Ruby environment setup
+source "\$HOME/.profile.d/ruby.sh"
+
+# Debug info if DEBUG is set
+if [ -n "\$DEBUG" ]; then
+  echo "[DEBUG] .profile: PATH=\$PATH"
+  echo "[DEBUG] .profile: which ruby=\$(which ruby 2>/dev/null || echo 'ruby not found')"
+  echo "[DEBUG] .profile: which bundle=\$(which bundle 2>/dev/null || echo 'bundle not found')"
+fi
+EOF
+chmod +x "$BUILD_DIR/.profile"
 
 # Check if we need Java
 if detect_needs_java "$BUILD_DIR"; then
