@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+# This is a wrapper script for Ruby that sets up the environment
+# to ensure RubyGems can be loaded correctly, bypassing gem_prelude issues
+
+# Get the Ruby binary path from the first argument
+RUBY_BIN="$1"
+shift
+
+# Set RUBYOPT to disable the gem prelude
+export RUBYOPT="-I${RUBYOPT:-}"
+
+# Create a temporary Ruby script that will be executed
+TMP_SCRIPT=$(mktemp)
+
+# Write a script that manually loads RubyGems before executing the actual script
+cat > "$TMP_SCRIPT" << 'EOF'
+begin
+  # Try to manually load rubygems from various possible locations
+  rubygems_paths = [
+    File.join(RbConfig::CONFIG['libdir'], 'ruby', RbConfig::CONFIG['ruby_version'], 'rubygems.rb'),
+    File.join(RbConfig::CONFIG['libdir'], 'ruby', 'rubygems.rb'),
+    File.join(RbConfig::CONFIG['libdir'], 'rubygems.rb')
+  ]
+  
+  # Add any paths from RUBYLIB
+  if ENV['RUBYLIB']
+    ENV['RUBYLIB'].split(':').each do |path|
+      rubygems_paths << File.join(path, 'rubygems.rb')
+    end
+  end
+  
+  # Try each path
+  loaded = false
+  rubygems_paths.each do |path|
+    if File.exist?(path)
+      puts "[DEBUG] Loading RubyGems from #{path}"
+      require path
+      loaded = true
+      break
+    end
+  end
+  
+  unless loaded
+    puts "[WARNING] Could not find rubygems.rb in any of the expected locations"
+    # As a last resort, try to require it directly
+    require 'rubygems'
+  end
+rescue LoadError => e
+  puts "[ERROR] Failed to load RubyGems: #{e.message}"
+  puts "[ERROR] Ruby load path: #{$LOAD_PATH.join(':')}"
+  puts "[ERROR] Ruby version: #{RUBY_VERSION}"
+  puts "[ERROR] Ruby platform: #{RUBY_PLATFORM}"
+  exit(1)
+end
+
+# Now load and run the actual script
+load ARGV[0]
+EOF
+
+# Execute the temporary script with the original Ruby binary
+"$RUBY_BIN" "$TMP_SCRIPT" "$@"
+
+# Clean up
+rm "$TMP_SCRIPT"

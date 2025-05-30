@@ -189,6 +189,18 @@ EOM
   compile_buildpack_v2 "$BUILD_DIR" "$CACHE_DIR" "$ENV_DIR" "https://buildpack-registry.s3.us-east-1.amazonaws.com/buildpacks/heroku/jvm.tgz" "heroku/jvm"
 fi
 
-# Run the Ruby compile script
-echo "[DEBUG] Running Ruby compile script with Ruby: $RUBY_BIN"
-"$RUBY_BIN" "$BIN_DIR/support/ruby_compile" "$@"
+# Run the Ruby compile script with our wrapper to fix RubyGems loading issues
+echo "[DEBUG] Running Ruby compile script with wrapper: $BIN_DIR/support/ruby_wrapper"
+"$BIN_DIR/support/ruby_wrapper" "$RUBY_BIN" "$BIN_DIR/support/ruby_compile" "$@"
+
+# If the above fails, try a direct approach with environment variables
+if [ $? -ne 0 ]; then
+  echo "[DEBUG] Wrapper failed, trying direct approach with environment variables"
+  # Disable the gem_prelude mechanism
+  export RUBYOPT="-I${RUBYOPT:-}"
+  echo "[DEBUG] RUBYOPT set to: $RUBYOPT"
+  
+  # Try running with the direct Ruby binary
+  echo "[DEBUG] Running Ruby compile script directly: $RUBY_BIN"
+  "$RUBY_BIN" "$BIN_DIR/support/ruby_compile" "$@"
+fi
