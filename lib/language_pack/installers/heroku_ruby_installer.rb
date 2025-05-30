@@ -16,7 +16,7 @@ class LanguagePack::Installers::HerokuRubyInstaller
     @fetcher = LanguagePack::Fetcher.new(BASE_URL, stack: "heroku-20")
   end
 
-  def install(ruby_version, install_dir)
+  def install(ruby_version, install_dir, openssl_dir = nil)
     @report.capture(
       "ruby.version" => ruby_version.ruby_version,
       "ruby.engine" => ruby_version.engine,
@@ -25,8 +25,10 @@ class LanguagePack::Installers::HerokuRubyInstaller
       "ruby.minor" => ruby_version.minor,
       "ruby.patch" => ruby_version.patch,
       "ruby.default" => ruby_version.default?,
+      "openssl.dir" => openssl_dir
     )
     fetch_unpack(ruby_version, install_dir)
+    configure_ruby_with_openssl(install_dir, openssl_dir) if openssl_dir
     setup_binstubs(install_dir)
   end
 
@@ -37,6 +39,39 @@ class LanguagePack::Installers::HerokuRubyInstaller
     end
   end
 
+  private def configure_ruby_with_openssl(install_dir, openssl_dir)
+    topic "Configuring Ruby to use OpenSSL from #{openssl_dir}"
+    
+    # Create a wrapper script for Ruby that sets SSL_CERT_FILE and other OpenSSL environment variables
+    wrapper_path = "#{install_dir}/bin/ruby_with_openssl"
+    File.open(wrapper_path, 'w') do |f|
+      f.puts "#!/bin/bash"
+      f.puts "export OPENSSL_DIR=\"#{openssl_dir}\""
+      f.puts "export SSL_CERT_FILE=\"#{openssl_dir}/ssl/cert.pem\""
+      f.puts "export LD_LIBRARY_PATH=\"#{openssl_dir}/lib:$LD_LIBRARY_PATH\""
+      f.puts "export LIBRARY_PATH=\"#{openssl_dir}/lib:$LIBRARY_PATH\""
+      f.puts "export CPATH=\"#{openssl_dir}/include:$CPATH\""
+      f.puts "\"#{install_dir}/bin/ruby\" \"$@\""
+    end
+    
+    # Make the wrapper executable
+    run("chmod +x #{wrapper_path}")
+    
+    # Create a symlink to use the wrapper by default
+    run("ln -sf ruby_with_openssl #{install_dir}/bin/ruby.openssl")
+    
+    # Create a .profile.d script to set environment variables for all processes
+    profile_dir = "#{install_dir}/../.profile.d"
+    FileUtils.mkdir_p(profile_dir)
+    File.open("#{profile_dir}/ruby_openssl.sh", 'w') do |f|
+      f.puts "export OPENSSL_DIR=\"#{openssl_dir}\""
+      f.puts "export SSL_CERT_FILE=\"#{openssl_dir}/ssl/cert.pem\""
+      f.puts "export LD_LIBRARY_PATH=\"#{openssl_dir}/lib:$LD_LIBRARY_PATH\""
+      f.puts "export LIBRARY_PATH=\"#{openssl_dir}/lib:$LIBRARY_PATH\""
+      f.puts "export CPATH=\"#{openssl_dir}/include:$CPATH\""
+    end
+  end
+  
   private def setup_binstubs(install_dir)
     BIN_DIR.mkpath
     run("ln -s ruby #{install_dir}/bin/ruby.exe")

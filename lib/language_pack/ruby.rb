@@ -470,7 +470,12 @@ private
   def install_ruby(install_path)
     # Could do a compare operation to avoid re-downloading ruby
     return false unless ruby_version
-
+    
+    # Install OpenSSL first
+    require 'language_pack/installers/openssl_installer'
+    openssl_installer = LanguagePack::Installers::OpenSSLInstaller.new(@build_path)
+    openssl_dir = openssl_installer.install
+    
     installer = LanguagePack::Installers::HerokuRubyInstaller.new(
       multi_arch_stacks: MULTI_ARCH_STACKS,
       stack: @stack,
@@ -484,7 +489,8 @@ private
     )
     @ruby_download_check.call
 
-    installer.install(ruby_version, install_path)
+    # Pass OpenSSL directory to Ruby installer
+    installer.install(ruby_version, install_path, openssl_dir)
 
     @outdated_version_check = LanguagePack::Helpers::OutdatedRubyVersion.new(
       current_ruby_version: ruby_version,
@@ -493,8 +499,9 @@ private
     @outdated_version_check.call
 
     @metadata.write("buildpack_ruby_version", ruby_version.version_for_download)
+    @metadata.write("openssl_dir", openssl_dir)
 
-    topic "Using Ruby version: #{ruby_version.version_for_download}"
+    topic "Using Ruby version: #{ruby_version.version_for_download} with OpenSSL from #{openssl_dir}"
     if ruby_version.default?
       warn(<<~WARNING)
         You have not declared a Ruby version in your Gemfile.
