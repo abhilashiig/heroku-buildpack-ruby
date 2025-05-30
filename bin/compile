@@ -19,6 +19,19 @@ echo "-----> Setting up OpenSSL for Ruby"
 OPENSSL_DIR=$($BIN_DIR/support/download_openssl "$BUILD_DIR" "$CACHE_DIR")
 echo "[DEBUG] OpenSSL installed at: $OPENSSL_DIR"
 
+# Verify OpenSSL directory exists
+if [ ! -d "$OPENSSL_DIR" ]; then
+  echo "[ERROR] OpenSSL directory not found at $OPENSSL_DIR"
+  exit 1
+fi
+
+# Verify OpenSSL libraries exist
+if [ ! -f "$OPENSSL_DIR/lib/libcrypto.so.1.0.0" ] || [ ! -f "$OPENSSL_DIR/lib/libssl.so.1.0.0" ]; then
+  echo "[ERROR] OpenSSL libraries not found in $OPENSSL_DIR/lib"
+  ls -la "$OPENSSL_DIR/lib" || echo "Cannot list $OPENSSL_DIR/lib"
+  exit 1
+fi
+
 # Use only the precompiled Ruby from rubies directory
 RUBIES_DIR="$BUILDPACK_DIR/rubies"
 RUBY_VERSION="2.6.6"
@@ -59,8 +72,11 @@ export RUBYLIB="$RUBY_LIB_DIR/2.6.0:$RUBY_LIB_DIR/2.6.0/x86_64-linux:$RUBY_LIB_D
 
 # Create symlinks to OpenSSL libraries in Ruby's lib directory
 echo "[DEBUG] Creating symlinks to OpenSSL libraries"
+mkdir -p "$RUBY_PATH/lib"
 ln -sf "$OPENSSL_DIR/lib/libcrypto.so.1.0.0" "$RUBY_PATH/lib/libcrypto.so.1.0.0"
 ln -sf "$OPENSSL_DIR/lib/libssl.so.1.0.0" "$RUBY_PATH/lib/libssl.so.1.0.0"
+echo "[DEBUG] Symlinks created successfully"
+ls -la "$RUBY_PATH/lib/libcrypto.so.1.0.0" "$RUBY_PATH/lib/libssl.so.1.0.0" || echo "Cannot list symlinks"
 
 # Unset GEM_PATH to avoid conflicts
 unset GEM_PATH

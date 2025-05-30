@@ -20,7 +20,7 @@ OPENSSL_URL="https://moonshot-buildpack-ruby.s3.amazonaws.com/binaries/openssl-1
 # Create directory for OpenSSL
 mkdir -p "$OPENSSL_DIR"
 
-echo "-----> Downloading OpenSSL ${OPENSSL_VERSION}"
+echo "-----> Downloading OpenSSL ${OPENSSL_VERSION}" >&2
 
 # Download and extract OpenSSL
 curl_retry_on_18() {
@@ -34,7 +34,7 @@ curl_retry_on_18() {
 }
 
 curl_retry_on_18 --fail --silent --location -o "$OPENSSL_DIR/openssl.tgz" "$OPENSSL_URL" || {
-  echo "Failed to download OpenSSL. This is required for the Ruby in rubies/ to work."
+  echo "Failed to download OpenSSL. This is required for the Ruby in rubies/ to work." >&2
   exit 1
 }
 
@@ -42,7 +42,7 @@ curl_retry_on_18 --fail --silent --location -o "$OPENSSL_DIR/openssl.tgz" "$OPEN
 tar -xzf "$OPENSSL_DIR/openssl.tgz" -C "$OPENSSL_DIR" --strip-components=1
 rm "$OPENSSL_DIR/openssl.tgz"
 
-echo "-----> OpenSSL ${OPENSSL_VERSION} installed to ${OPENSSL_DIR}"
+echo "-----> OpenSSL ${OPENSSL_VERSION} installed to ${OPENSSL_DIR}" >&2
 
-# Return the OpenSSL directory path
+# Return the OpenSSL directory path as the only stdout output
 echo "$OPENSSL_DIR"
