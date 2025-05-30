@@ -42,8 +42,19 @@ class LanguagePack::Installers::HerokuRubyInstaller
   private def configure_ruby_with_openssl(install_dir, openssl_dir)
     topic "Configuring Ruby to use OpenSSL from #{openssl_dir}"
     
+    # Make sure the bin directory exists
+    ruby_bin_dir = "#{install_dir}/bin"
+    FileUtils.mkdir_p(ruby_bin_dir) unless File.directory?(ruby_bin_dir)
+    
+    # Check if the Ruby binary exists before creating the wrapper
+    ruby_binary = "#{ruby_bin_dir}/ruby"
+    unless File.exist?(ruby_binary)
+      topic "Warning: Ruby binary not found at #{ruby_binary}, skipping OpenSSL wrapper creation"
+      return
+    end
+    
     # Create a wrapper script for Ruby that sets SSL_CERT_FILE and other OpenSSL environment variables
-    wrapper_path = "#{install_dir}/bin/ruby_with_openssl"
+    wrapper_path = "#{ruby_bin_dir}/ruby_with_openssl"
     File.open(wrapper_path, 'w') do |f|
       f.puts "#!/bin/bash"
       f.puts "export OPENSSL_DIR=\"#{openssl_dir}\""
@@ -51,25 +62,24 @@ class LanguagePack::Installers::HerokuRubyInstaller
       f.puts "export LD_LIBRARY_PATH=\"#{openssl_dir}/lib:$LD_LIBRARY_PATH\""
       f.puts "export LIBRARY_PATH=\"#{openssl_dir}/lib:$LIBRARY_PATH\""
       f.puts "export CPATH=\"#{openssl_dir}/include:$CPATH\""
-      f.puts "\"#{install_dir}/bin/ruby\" \"$@\""
+      f.puts "\"#{ruby_binary}\" \"$@\""
     end
     
     # Make the wrapper executable
     run("chmod +x #{wrapper_path}")
     
-    # Create a symlink to use the wrapper by default
-    run("ln -sf ruby_with_openssl #{install_dir}/bin/ruby.openssl")
-    
-    # Create a .profile.d script to set environment variables for all processes
-    profile_dir = "#{install_dir}/../.profile.d"
-    FileUtils.mkdir_p(profile_dir)
-    File.open("#{profile_dir}/ruby_openssl.sh", 'w') do |f|
-      f.puts "export OPENSSL_DIR=\"#{openssl_dir}\""
-      f.puts "export SSL_CERT_FILE=\"#{openssl_dir}/ssl/cert.pem\""
-      f.puts "export LD_LIBRARY_PATH=\"#{openssl_dir}/lib:$LD_LIBRARY_PATH\""
-      f.puts "export LIBRARY_PATH=\"#{openssl_dir}/lib:$LIBRARY_PATH\""
-      f.puts "export CPATH=\"#{openssl_dir}/include:$CPATH\""
+    # Create a backup of the original Ruby binary if it doesn't exist
+    ruby_backup = "#{ruby_bin_dir}/ruby.original"
+    unless File.exist?(ruby_backup)
+      run("cp #{ruby_binary} #{ruby_backup}")
     end
+    
+    # Create a symlink to use the wrapper by default
+    # Don't replace the original ruby binary to avoid breaking the bootstrap process
+    run("ln -sf ruby_with_openssl #{ruby_bin_dir}/ruby.openssl")
+    
+    topic "Created OpenSSL-enabled Ruby wrapper at #{wrapper_path}"
+    topic "Use ruby.openssl to run Ruby with OpenSSL support"
   end
   
   private def setup_binstubs(install_dir)
