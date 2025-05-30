@@ -165,11 +165,60 @@ fi
 echo "-----> Creating .profile.d script for Ruby environment"
 mkdir -p "$BUILD_DIR/.profile.d"
 cat > "$BUILD_DIR/.profile.d/ruby.sh" << EOF
+#!/bin/bash
+# Ruby environment setup for all phases (build, release, runtime)
 export PATH="$RUBY_PATH/bin:\$PATH"
 export LD_LIBRARY_PATH="$RUBY_PATH/lib:$OPENSSL_DIR/lib:\${LD_LIBRARY_PATH:-}"
 export RUBYLIB="$RUBY_LIB_DIR/2.6.0:$RUBY_LIB_DIR/2.6.0/x86_64-linux:$RUBY_LIB_DIR/site_ruby/2.6.0:$RUBY_LIB_DIR/vendor_ruby/2.6.0:\${RUBYLIB:-}"
+
+# Disable gem_prelude to avoid RubyGems loading issues
+export RUBYOPT="-I\${RUBYOPT:-}"
+
+# Set GEM_HOME and GEM_PATH to ensure gems are found
+export GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0"
+export GEM_PATH="$GEM_HOME"
+
+# Print debug info if DEBUG is set
+if [ -n "\$DEBUG" ]; then
+  echo "[DEBUG] Ruby environment: PATH=\$PATH"
+  echo "[DEBUG] Ruby environment: LD_LIBRARY_PATH=\$LD_LIBRARY_PATH"
+  echo "[DEBUG] Ruby environment: RUBYLIB=\$RUBYLIB"
+  echo "[DEBUG] Ruby environment: GEM_HOME=\$GEM_HOME"
+  echo "[DEBUG] Ruby environment: GEM_PATH=\$GEM_PATH"
+  which ruby
+  ruby -v
+fi
 EOF
 chmod +x "$BUILD_DIR/.profile.d/ruby.sh"
+
+# Also create a script for the release phase
+echo "-----> Creating release phase script"
+mkdir -p "$BUILD_DIR/.heroku/bin"
+cat > "$BUILD_DIR/.heroku/bin/release" << EOF
+#!/bin/bash
+# Source the Ruby environment setup
+source "$BUILD_DIR/.profile.d/ruby.sh"
+
+# Debug info
+echo "[DEBUG] Release phase: PATH=\$PATH"
+echo "[DEBUG] Release phase: which ruby=\$(which ruby 2>/dev/null || echo 'ruby not found')"
+echo "[DEBUG] Release phase: which bundle=\$(which bundle 2>/dev/null || echo 'bundle not found')"
+
+# Run the original release command
+exec "\$@"
+EOF
+chmod +x "$BUILD_DIR/.heroku/bin/release"
+
+# Create a wrapper for bundle command
+cat > "$BUILD_DIR/.heroku/bin/bundle" << EOF
+#!/bin/bash
+# Source the Ruby environment setup
+source "$BUILD_DIR/.profile.d/ruby.sh"
+
+# Run the bundle command with the Ruby from our environment
+"$RUBY_PATH/bin/bundle" "\$@"
+EOF
+chmod +x "$BUILD_DIR/.heroku/bin/bundle"
 
 # Check if we need Java
 if detect_needs_java "$BUILD_DIR"; then
