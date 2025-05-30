@@ -11,9 +11,42 @@ BUILDPACK_DIR=$(dirname "$BIN_DIR")
 # shellcheck source=bin/support/bash_functions.sh
 source "$BIN_DIR/support/bash_functions.sh"
 
+echo "DEBUG: About to call install_bootstrap_ruby"
 bootstrap_ruby_dir=$(install_bootstrap_ruby "$BIN_DIR" "$BUILDPACK_DIR")
+echo "DEBUG: install_bootstrap_ruby returned: $bootstrap_ruby_dir"
+echo "DEBUG: Checking if bootstrap Ruby directory exists:"
+if [ -d "$bootstrap_ruby_dir" ]; then
+  echo "DEBUG: Directory exists"
+else
+  echo "DEBUG: Directory does not exist"
+fi
+
+echo "DEBUG: Checking for Ruby binary:"
+if [ -f "$bootstrap_ruby_dir/bin/ruby" ]; then
+  echo "DEBUG: Ruby binary found at $bootstrap_ruby_dir/bin/ruby"
+  ls -la "$bootstrap_ruby_dir/bin/ruby"
+  echo "DEBUG: Ruby binary permissions:"
+  file "$bootstrap_ruby_dir/bin/ruby"
+  echo "DEBUG: Ruby binary is executable: $([ -x "$bootstrap_ruby_dir/bin/ruby" ] && echo "Yes" || echo "No")"
+else
+  echo "DEBUG: Ruby binary NOT found at $bootstrap_ruby_dir/bin/ruby"
+  echo "DEBUG: Listing contents of bootstrap_ruby_dir:"
+  ls -la "$bootstrap_ruby_dir"
+  if [ -d "$bootstrap_ruby_dir/bin" ]; then
+    echo "DEBUG: Listing bin directory:"
+    ls -la "$bootstrap_ruby_dir/bin"
+  else
+    echo "DEBUG: bin directory does not exist"
+    echo "DEBUG: Searching for ruby binary in $bootstrap_ruby_dir:"
+    find "$bootstrap_ruby_dir" -name ruby -type f 2>/dev/null || echo "DEBUG: No ruby binary found"
+  fi
+fi
+
+echo "DEBUG: Setting PATH to include $bootstrap_ruby_dir/bin/"
 export PATH="$bootstrap_ruby_dir/bin/:$PATH"
+echo "DEBUG: PATH is now: $PATH"
 unset GEM_PATH
+echo "DEBUG: GEM_PATH unset"
 
 if detect_needs_java "$BUILD_DIR"; then
   cat <<EOM

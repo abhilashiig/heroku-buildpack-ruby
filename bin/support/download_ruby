@@ -45,7 +45,8 @@ fi
 
 mkdir -p "$RUBY_BOOTSTRAP_DIR"
 
-curl_retry_on_18 --fail --retry 3 --retry-connrefused --connect-timeout "${CURL_CONNECT_TIMEOUT:-3}" --silent --location -o "$RUBY_BOOTSTRAP_DIR/ruby.tgz" "$heroku_buildpack_ruby_url" || {
+echo "DEBUG: Downloading Ruby from $heroku_buildpack_ruby_url to $RUBY_BOOTSTRAP_DIR/ruby.tgz"
+curl_retry_on_18 --fail --retry 3 --retry-connrefused --connect-timeout "${CURL_CONNECT_TIMEOUT:-3}" --location -o "$RUBY_BOOTSTRAP_DIR/ruby.tgz" "$heroku_buildpack_ruby_url" || {
 cat<<EOF
   Failed to download a Ruby executable for bootstrapping!
 
@@ -58,4 +59,23 @@ EOF
   exit 1
 }
 
+echo "DEBUG: Extracting Ruby from $RUBY_BOOTSTRAP_DIR/ruby.tgz to $RUBY_BOOTSTRAP_DIR"
 tar xzf "$RUBY_BOOTSTRAP_DIR/ruby.tgz" -C "$RUBY_BOOTSTRAP_DIR"
+echo "DEBUG: Extraction complete, listing files in $RUBY_BOOTSTRAP_DIR:"
+ls -la "$RUBY_BOOTSTRAP_DIR"
+echo "DEBUG: Checking for Ruby binary:"
+if [ -f "$RUBY_BOOTSTRAP_DIR/bin/ruby" ]; then
+  echo "DEBUG: Ruby binary found at $RUBY_BOOTSTRAP_DIR/bin/ruby"
+  ls -la "$RUBY_BOOTSTRAP_DIR/bin/ruby"
+  file "$RUBY_BOOTSTRAP_DIR/bin/ruby"
+else
+  echo "DEBUG: Ruby binary NOT found at $RUBY_BOOTSTRAP_DIR/bin/ruby"
+  echo "DEBUG: Listing bin directory if it exists:"
+  if [ -d "$RUBY_BOOTSTRAP_DIR/bin" ]; then
+    ls -la "$RUBY_BOOTSTRAP_DIR/bin"
+  else
+    echo "DEBUG: bin directory does not exist"
+    echo "DEBUG: Listing all directories in $RUBY_BOOTSTRAP_DIR:"
+    find "$RUBY_BOOTSTRAP_DIR" -type d | sort
+  fi
+fi
