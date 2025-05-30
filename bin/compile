@@ -57,6 +57,26 @@ echo "DEBUG: Setting RUBYLIB to include Ruby's standard libraries"
 export RUBYLIB="$bootstrap_ruby_dir/ruby-2.6.6/lib/ruby/2.6.0:$bootstrap_ruby_dir/ruby-2.6.6/lib/ruby/2.6.0/x86_64-linux:${RUBYLIB:-}"
 echo "DEBUG: RUBYLIB is now: $RUBYLIB"
 
+# Install OpenSSL before running Ruby
+echo "DEBUG: Installing OpenSSL for Ruby"
+openssl_dir="$BUILD_DIR/vendor/openssl"
+mkdir -p "$openssl_dir"
+echo "DEBUG: Downloading OpenSSL from https://moonshot-buildpack-ruby.s3.amazonaws.com/binaries/openssl-1.0.1e.tgz"
+cd "$openssl_dir"
+curl -s https://moonshot-buildpack-ruby.s3.amazonaws.com/binaries/openssl-1.0.1e.tgz -o openssl.tgz
+tar xzf openssl.tgz
+rm openssl.tgz
+echo "DEBUG: OpenSSL installed at $openssl_dir"
+
+# Set environment variables for OpenSSL
+echo "DEBUG: Setting OpenSSL environment variables"
+export OPENSSL_DIR="$openssl_dir"
+export SSL_CERT_FILE="$openssl_dir/ssl/cert.pem"
+export LD_LIBRARY_PATH="$openssl_dir/lib:$bootstrap_ruby_dir/ruby-2.6.6/lib/:${LD_LIBRARY_PATH:-}"
+export LIBRARY_PATH="$openssl_dir/lib:${LIBRARY_PATH:-}"
+export CPATH="$openssl_dir/include:${CPATH:-}"
+echo "DEBUG: LD_LIBRARY_PATH is now: $LD_LIBRARY_PATH"
+
 unset GEM_PATH
 echo "DEBUG: GEM_PATH unset"
 
