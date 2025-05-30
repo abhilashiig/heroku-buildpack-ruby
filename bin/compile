@@ -197,56 +197,137 @@ echo "-----> Creating system-wide wrappers for Ruby commands"
 # Create bin directory in the app that will be in PATH
 mkdir -p "$BUILD_DIR/bin"
 
-# Create a wrapper for the bundle command
-cat > "$BUILD_DIR/bin/bundle" << EOF
+# Create a standalone environment setup script that doesn't rely on paths
+cat > "$BUILD_DIR/bin/ruby_env.sh" << 'EOF'
 #!/bin/bash
-# Source the Ruby environment setup
-source "$BUILD_DIR/.profile.d/ruby.sh"
+# This script sets up the Ruby environment and handles path differences
+# between build and release environments
+
+# Detect the environment
+if [ -d "/tmp/codon/tmp/buildpacks" ]; then
+  # We're in the build environment
+  BUILDPACK_PATH="/tmp/codon/tmp/buildpacks/9f9b1288a237382b468e1c22287d00a95f043abf"
+  APP_PATH="$BUILD_DIR"
+else
+  # We're in the release or runtime environment
+  BUILDPACK_PATH="/app"
+  APP_PATH="/app"
+fi
+
+# Set up Ruby paths
+RUBY_PATH="${BUILDPACK_PATH}/rubies/ruby-2.6.6"
+OPENSSL_PATH="${APP_PATH}/vendor/openssl"
+RUBY_LIB_DIR="${RUBY_PATH}/lib/ruby"
+
+# Add Ruby to PATH
+export PATH="${RUBY_PATH}/bin:${PATH}"
+
+# Set LD_LIBRARY_PATH for shared libraries
+export LD_LIBRARY_PATH="${RUBY_PATH}/lib:${OPENSSL_PATH}/lib:${LD_LIBRARY_PATH:-}"
+
+# Set RUBYLIB for Ruby libraries
+export RUBYLIB="${RUBY_LIB_DIR}/2.6.0:${RUBY_LIB_DIR}/2.6.0/x86_64-linux:${RUBY_LIB_DIR}/site_ruby/2.6.0:${RUBY_LIB_DIR}/vendor_ruby/2.6.0:${RUBYLIB:-}"
+
+# Disable gem_prelude to avoid RubyGems loading issues
+export RUBYOPT="-I${RUBYOPT:-}"
+
+# Set GEM_HOME and GEM_PATH to ensure gems are found
+export GEM_HOME="${RUBY_PATH}/lib/ruby/gems/2.6.0"
+export GEM_PATH="${GEM_HOME}"
+
+# Print debug info if DEBUG is set
+if [ -n "$DEBUG" ]; then
+  echo "[DEBUG] Ruby environment: BUILDPACK_PATH=$BUILDPACK_PATH"
+  echo "[DEBUG] Ruby environment: APP_PATH=$APP_PATH"
+  echo "[DEBUG] Ruby environment: RUBY_PATH=$RUBY_PATH"
+  echo "[DEBUG] Ruby environment: OPENSSL_PATH=$OPENSSL_PATH"
+  echo "[DEBUG] Ruby environment: PATH=$PATH"
+  echo "[DEBUG] Ruby environment: LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+  echo "[DEBUG] Ruby environment: RUBYLIB=$RUBYLIB"
+  echo "[DEBUG] Ruby environment: GEM_HOME=$GEM_HOME"
+  echo "[DEBUG] Ruby environment: GEM_PATH=$GEM_PATH"
+fi
+EOF
+chmod +x "$BUILD_DIR/bin/ruby_env.sh"
+
+# Create a wrapper for the bundle command
+cat > "$BUILD_DIR/bin/bundle" << 'EOF'
+#!/bin/bash
+# Load the Ruby environment
+source "$(dirname "$0")/ruby_env.sh"
 
 # Debug info
-echo "[DEBUG] Bundle wrapper: PATH=\$PATH"
-echo "[DEBUG] Bundle wrapper: RUBYLIB=\$RUBYLIB"
-echo "[DEBUG] Bundle wrapper: LD_LIBRARY_PATH=\$LD_LIBRARY_PATH"
+echo "[DEBUG] Bundle wrapper: PATH=$PATH"
+echo "[DEBUG] Bundle wrapper: RUBYLIB=$RUBYLIB"
+echo "[DEBUG] Bundle wrapper: LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+echo "[DEBUG] Bundle wrapper: RUBY_PATH=$RUBY_PATH"
 
 # Run the bundle command with the Ruby from our environment
 if [ -x "$RUBY_PATH/bin/bundle" ]; then
   echo "[DEBUG] Using bundle from $RUBY_PATH/bin/bundle"
-  exec "$RUBY_PATH/bin/bundle" "\$@"
+  exec "$RUBY_PATH/bin/bundle" "$@"
 else
   echo "[ERROR] Bundle not found at $RUBY_PATH/bin/bundle"
   # Try to install bundler
   echo "[DEBUG] Attempting to install bundler"
-  "$RUBY_PATH/bin/gem" install bundler --no-document
-  if [ -x "$RUBY_PATH/bin/bundle" ]; then
-    echo "[DEBUG] Bundler installed successfully"
-    exec "$RUBY_PATH/bin/bundle" "\$@"
+  if [ -x "$RUBY_PATH/bin/gem" ]; then
+    "$RUBY_PATH/bin/gem" install bundler --no-document
+    if [ -x "$RUBY_PATH/bin/bundle" ]; then
+      echo "[DEBUG] Bundler installed successfully"
+      exec "$RUBY_PATH/bin/bundle" "$@"
+    else
+      echo "[ERROR] Failed to install bundler"
+    fi
   else
-    echo "[ERROR] Failed to install bundler"
-    exit 1
+    echo "[ERROR] Gem command not found at $RUBY_PATH/bin/gem"
+    ls -la "$RUBY_PATH/bin" || echo "Cannot list $RUBY_PATH/bin"
   fi
+  exit 1
 fi
 EOF
 chmod +x "$BUILD_DIR/bin/bundle"
 
 # Create a wrapper for the ruby command
-cat > "$BUILD_DIR/bin/ruby" << EOF
+cat > "$BUILD_DIR/bin/ruby" << 'EOF'
 #!/bin/bash
-# Source the Ruby environment setup
-source "$BUILD_DIR/.profile.d/ruby.sh"
+# Load the Ruby environment
+source "$(dirname "$0")/ruby_env.sh"
+
+# Debug info if DEBUG is set
+if [ -n "$DEBUG" ]; then
+  echo "[DEBUG] Ruby wrapper: PATH=$PATH"
+  echo "[DEBUG] Ruby wrapper: RUBY_PATH=$RUBY_PATH"
+fi
 
 # Run the ruby command with our environment
-exec "$RUBY_PATH/bin/ruby" "\$@"
+if [ -x "$RUBY_PATH/bin/ruby" ]; then
+  exec "$RUBY_PATH/bin/ruby" "$@"
+else
+  echo "[ERROR] Ruby not found at $RUBY_PATH/bin/ruby"
+  exit 1
+fi
 EOF
 chmod +x "$BUILD_DIR/bin/ruby"
 
 # Create a wrapper for the gem command
-cat > "$BUILD_DIR/bin/gem" << EOF
+cat > "$BUILD_DIR/bin/gem" << 'EOF'
 #!/bin/bash
-# Source the Ruby environment setup
-source "$BUILD_DIR/.profile.d/ruby.sh"
+# Load the Ruby environment
+source "$(dirname "$0")/ruby_env.sh"
+
+# Debug info if DEBUG is set
+if [ -n "$DEBUG" ]; then
+  echo "[DEBUG] Gem wrapper: PATH=$PATH"
+  echo "[DEBUG] Gem wrapper: RUBY_PATH=$RUBY_PATH"
+fi
 
 # Run the gem command with our environment
-exec "$RUBY_PATH/bin/gem" "\$@"
+if [ -x "$RUBY_PATH/bin/gem" ]; then
+  exec "$RUBY_PATH/bin/gem" "$@"
+else
+  echo "[ERROR] Gem not found at $RUBY_PATH/bin/gem"
+  exit 1
+fi
 EOF
 chmod +x "$BUILD_DIR/bin/gem"
 
@@ -260,25 +341,64 @@ fi
 echo "-----> Testing bundle command"
 "$BUILD_DIR/bin/bundle" --version || echo "[WARNING] Bundle command test failed"
 
+# Create a Gemfile.lock if it doesn't exist (to avoid the buildpack error)
+if [ ! -f "$BUILD_DIR/Gemfile.lock" ] && [ -f "$BUILD_DIR/Gemfile" ]; then
+  echo "-----> Creating empty Gemfile.lock"
+  touch "$BUILD_DIR/Gemfile.lock"
+fi
+
 # Create a .profile script that will run before any process
-cat > "$BUILD_DIR/.profile" << EOF
+cat > "$BUILD_DIR/.profile" << 'EOF'
 #!/bin/bash
 # This script runs before any process, including release phase
 
 # Add our bin directory to the front of PATH
-export PATH="\$HOME/bin:\$PATH"
+export PATH="$HOME/bin:$PATH"
+export DEBUG=1
 
-# Source the Ruby environment setup
-source "\$HOME/.profile.d/ruby.sh"
+# Print debug info
+echo "[DEBUG] .profile: Starting environment setup"
+echo "[DEBUG] .profile: Initial PATH=$PATH"
 
-# Debug info if DEBUG is set
-if [ -n "\$DEBUG" ]; then
-  echo "[DEBUG] .profile: PATH=\$PATH"
-  echo "[DEBUG] .profile: which ruby=\$(which ruby 2>/dev/null || echo 'ruby not found')"
-  echo "[DEBUG] .profile: which bundle=\$(which bundle 2>/dev/null || echo 'bundle not found')"
+# Check if ruby_env.sh exists
+if [ -f "$HOME/bin/ruby_env.sh" ]; then
+  echo "[DEBUG] .profile: Loading Ruby environment from $HOME/bin/ruby_env.sh"
+  source "$HOME/bin/ruby_env.sh"
+else
+  echo "[ERROR] .profile: Ruby environment script not found at $HOME/bin/ruby_env.sh"
+  # List contents of bin directory
+  echo "[DEBUG] Contents of $HOME/bin:"
+  ls -la "$HOME/bin" || echo "Cannot list $HOME/bin"
+fi
+
+# Debug info
+echo "[DEBUG] .profile: PATH=$PATH"
+echo "[DEBUG] .profile: which ruby=$(which ruby 2>/dev/null || echo 'ruby not found')"
+echo "[DEBUG] .profile: which bundle=$(which bundle 2>/dev/null || echo 'bundle not found')"
+
+# If bundle is not found, try to install it
+if ! which bundle > /dev/null 2>&1; then
+  echo "[DEBUG] .profile: Bundle not found, attempting to install"
+  if which gem > /dev/null 2>&1; then
+    gem install bundler --no-document
+    echo "[DEBUG] .profile: Bundler installed, which bundle=$(which bundle 2>/dev/null || echo 'bundle still not found')"
+  else
+    echo "[ERROR] .profile: Gem command not found, cannot install bundler"
+  fi
 fi
 EOF
 chmod +x "$BUILD_DIR/.profile"
+
+# Copy the rubies directory to the app directory for the release phase
+echo "-----> Copying Ruby to app directory for release phase"
+mkdir -p "$BUILD_DIR/rubies"
+cp -R "$BUILDPACK_DIR/rubies/ruby-2.6.6" "$BUILD_DIR/rubies/"
+echo "[DEBUG] Ruby copied to $BUILD_DIR/rubies/ruby-2.6.6"
+
+# Install bundler in the Ruby installation
+echo "-----> Installing bundler in Ruby"
+"$RUBY_PATH/bin/gem" install bundler --no-document
+echo "[DEBUG] Bundler installed: $($RUBY_PATH/bin/bundle --version 2>/dev/null || echo 'Bundler installation failed')"
 
 # Check if we need Java
 if detect_needs_java "$BUILD_DIR"; then
