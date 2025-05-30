@@ -2,6 +2,9 @@
 # The actual compilation code lives in `bin/support/ruby_compile`. This file instead
 # bootstraps the ruby needed and then executes `bin/support/ruby_compile`
 
+set -e  # Exit immediately if a command exits with a non-zero status
+set -o pipefail  # Return value of a pipeline is the value of the last command to exit with a non-zero status
+
 BUILD_DIR=$1
 CACHE_DIR=$2
 ENV_DIR=$3
@@ -11,38 +14,67 @@ BUILDPACK_DIR=$(dirname "$BIN_DIR")
 # shellcheck source=bin/support/bash_functions.sh
 source "$BIN_DIR/support/bash_functions.sh"
 
-# Prefer local rubies directory if available
+# Use only the precompiled Ruby from rubies directory
 RUBIES_DIR="$BUILDPACK_DIR/rubies"
 RUBY_VERSION="2.6.6"
-LOCAL_RUBY_BIN="$RUBIES_DIR/ruby-$RUBY_VERSION/bin/ruby"
+RUBY_PATH="$RUBIES_DIR/ruby-$RUBY_VERSION"
+RUBY_BIN="$RUBY_PATH/bin/ruby"
 
-if [ -x "$LOCAL_RUBY_BIN" ]; then
-  echo "[DEBUG] Using Ruby from local rubies directory: $LOCAL_RUBY_BIN"
-  BOOTSTRAP_RUBY_BIN="$LOCAL_RUBY_BIN"
-  RUBY_LIB_DIR="$RUBIES_DIR/ruby-$RUBY_VERSION/lib/ruby"
-  
-  # Set up environment variables
-  export PATH="$RUBIES_DIR/ruby-$RUBY_VERSION/bin/:$PATH"
-  export LD_LIBRARY_PATH="$RUBIES_DIR/ruby-$RUBY_VERSION/lib:${LD_LIBRARY_PATH:-}"
-  export RUBYLIB="$RUBY_LIB_DIR/2.6.0:$RUBY_LIB_DIR/2.6.0/x86_64-linux:$RUBY_LIB_DIR/site_ruby/2.6.0:$RUBY_LIB_DIR/vendor_ruby/2.6.0:${RUBYLIB:-}"
-  
-  # Debug output
-  echo "[DEBUG] LD_LIBRARY_PATH set to: $LD_LIBRARY_PATH"
-  echo "[DEBUG] RUBYLIB set to: $RUBYLIB"
-else
-  echo "[DEBUG] Local Ruby not found at $LOCAL_RUBY_BIN. Falling back to bootstrap_ruby_dir."
-  bootstrap_ruby_dir=$(install_bootstrap_ruby "$BIN_DIR" "$BUILDPACK_DIR")
-  export PATH="$bootstrap_ruby_dir/bin/:$PATH"
-  BOOTSTRAP_RUBY_BIN="$bootstrap_ruby_dir/bin/ruby"
+# Check if Ruby exists in the rubies directory
+if [ ! -f "$RUBY_BIN" ]; then
+  echo "[ERROR] Precompiled Ruby not found at $RUBY_BIN"
+  echo "[ERROR] Make sure the rubies directory contains a properly compiled Ruby $RUBY_VERSION"
+  exit 1
 fi
 
+# Check if Ruby is executable
+if [ ! -x "$RUBY_BIN" ]; then
+  echo "[ERROR] Ruby binary at $RUBY_BIN is not executable"
+  chmod +x "$RUBY_BIN"
+  echo "[DEBUG] Made Ruby binary executable"
+fi
+
+# Set up environment variables for Ruby
+echo "[DEBUG] Using precompiled Ruby from: $RUBY_BIN"
+RUBY_LIB_DIR="$RUBY_PATH/lib/ruby"
+
+# Add Ruby to PATH
+export PATH="$RUBY_PATH/bin:$PATH"
+
+# Set LD_LIBRARY_PATH for shared libraries
+export LD_LIBRARY_PATH="$RUBY_PATH/lib:${LD_LIBRARY_PATH:-}"
+
+# Set RUBYLIB for Ruby libraries
+export RUBYLIB="$RUBY_LIB_DIR/2.6.0:$RUBY_LIB_DIR/2.6.0/x86_64-linux:$RUBY_LIB_DIR/site_ruby/2.6.0:$RUBY_LIB_DIR/vendor_ruby/2.6.0:${RUBYLIB:-}"
+
+# Unset GEM_PATH to avoid conflicts
 unset GEM_PATH
 
-# Debugging info
+# Print debug information
+echo "[DEBUG] Ruby binary: $RUBY_BIN"
 echo "[DEBUG] PATH: $PATH"
-echo "[DEBUG] Which ruby: $(which ruby)"
-echo "[DEBUG] Ruby version: $(ruby --version 2>/dev/null || echo 'ruby not found')"
+echo "[DEBUG] LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+echo "[DEBUG] RUBYLIB: $RUBYLIB"
+echo "[DEBUG] Which ruby: $(which ruby 2>/dev/null || echo 'ruby not in PATH')"
 
+# Test Ruby
+if "$RUBY_BIN" --version > /dev/null 2>&1; then
+  echo "[DEBUG] Ruby version: $($RUBY_BIN --version)"
+else
+  echo "[ERROR] Ruby binary exists but cannot be executed properly"
+  echo "[DEBUG] Ruby binary details: $(file "$RUBY_BIN")"
+  echo "[DEBUG] Ruby binary permissions: $(ls -la "$RUBY_BIN")"
+  exit 1
+fi
+
+# Check if OpenSSL is working
+if "$RUBY_BIN" -ropenssl -e 'puts "[DEBUG] OpenSSL version: #{OpenSSL::OPENSSL_VERSION}"' > /dev/null 2>&1; then
+  "$RUBY_BIN" -ropenssl -e 'puts "[DEBUG] OpenSSL version: #{OpenSSL::OPENSSL_VERSION}"'
+else
+  echo "[WARNING] Ruby cannot load OpenSSL. This may cause issues with SSL/TLS connections."
+fi
+
+# Check if we need Java
 if detect_needs_java "$BUILD_DIR"; then
   cat <<EOM
 
@@ -60,12 +92,6 @@ EOM
   compile_buildpack_v2 "$BUILD_DIR" "$CACHE_DIR" "$ENV_DIR" "https://buildpack-registry.s3.us-east-1.amazonaws.com/buildpacks/heroku/jvm.tgz" "heroku/jvm"
 fi
 
-if [ ! -x "$BOOTSTRAP_RUBY_BIN" ]; then
-  echo "[ERROR] Ruby binary not found at $BOOTSTRAP_RUBY_BIN. Exiting."
-  exit 1
-fi
-
-# More debug info
-"$BOOTSTRAP_RUBY_BIN" --version
-
-"$BOOTSTRAP_RUBY_BIN" "$BIN_DIR/support/ruby_compile" "$@"
+# Run the Ruby compile script
+echo "[DEBUG] Running Ruby compile script with precompiled Ruby"
+"$RUBY_BIN" "$BIN_DIR/support/ruby_compile" "$@"
