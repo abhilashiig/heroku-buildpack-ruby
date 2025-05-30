@@ -63,19 +63,36 @@ echo "DEBUG: Extracting Ruby from $RUBY_BOOTSTRAP_DIR/ruby.tgz to $RUBY_BOOTSTRA
 tar xzf "$RUBY_BOOTSTRAP_DIR/ruby.tgz" -C "$RUBY_BOOTSTRAP_DIR"
 echo "DEBUG: Extraction complete, listing files in $RUBY_BOOTSTRAP_DIR:"
 ls -la "$RUBY_BOOTSTRAP_DIR"
-echo "DEBUG: Checking for Ruby binary:"
-if [ -f "$RUBY_BOOTSTRAP_DIR/bin/ruby" ]; then
-  echo "DEBUG: Ruby binary found at $RUBY_BOOTSTRAP_DIR/bin/ruby"
+
+# Fix the directory structure - the buildpack expects Ruby directly in the bootstrap dir
+echo "DEBUG: Checking for Ruby binary in extracted directory structure"
+if [ -f "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6/bin/ruby" ]; then
+  echo "DEBUG: Ruby binary found at $RUBY_BOOTSTRAP_DIR/ruby-2.6.6/bin/ruby"
+  
+  # Create the bin directory if it doesn't exist
+  if [ ! -d "$RUBY_BOOTSTRAP_DIR/bin" ]; then
+    echo "DEBUG: Creating bin directory in $RUBY_BOOTSTRAP_DIR"
+    mkdir -p "$RUBY_BOOTSTRAP_DIR/bin"
+  fi
+  
+  # Create a symlink to the actual Ruby binary
+  echo "DEBUG: Creating symlink from $RUBY_BOOTSTRAP_DIR/ruby-2.6.6/bin/ruby to $RUBY_BOOTSTRAP_DIR/bin/ruby"
+  ln -sf "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6/bin/ruby" "$RUBY_BOOTSTRAP_DIR/bin/ruby"
+  
+  # Also symlink other important executables
+  for exe in "$RUBY_BOOTSTRAP_DIR/ruby-2.6.6/bin"/*; do
+    if [ -f "$exe" ] && [ -x "$exe" ]; then
+      exe_name=$(basename "$exe")
+      echo "DEBUG: Creating symlink for $exe_name"
+      ln -sf "$exe" "$RUBY_BOOTSTRAP_DIR/bin/$exe_name"
+    fi
+  done
+  
+  echo "DEBUG: Checking if symlink was created correctly:"
   ls -la "$RUBY_BOOTSTRAP_DIR/bin/ruby"
   file "$RUBY_BOOTSTRAP_DIR/bin/ruby"
 else
-  echo "DEBUG: Ruby binary NOT found at $RUBY_BOOTSTRAP_DIR/bin/ruby"
-  echo "DEBUG: Listing bin directory if it exists:"
-  if [ -d "$RUBY_BOOTSTRAP_DIR/bin" ]; then
-    ls -la "$RUBY_BOOTSTRAP_DIR/bin"
-  else
-    echo "DEBUG: bin directory does not exist"
-    echo "DEBUG: Listing all directories in $RUBY_BOOTSTRAP_DIR:"
-    find "$RUBY_BOOTSTRAP_DIR" -type d | sort
-  fi
+  echo "DEBUG: Ruby binary NOT found at $RUBY_BOOTSTRAP_DIR/ruby-2.6.6/bin/ruby"
+  echo "DEBUG: Searching for ruby binary in $RUBY_BOOTSTRAP_DIR:"
+  find "$RUBY_BOOTSTRAP_DIR" -name ruby -type f -executable 2>/dev/null || echo "DEBUG: No ruby binary found"
 fi
