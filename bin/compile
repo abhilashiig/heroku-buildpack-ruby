@@ -584,12 +584,31 @@ mkdir -p "$BUILD_DIR/rubies"
 cp -R "$BUILDPACK_DIR/rubies/ruby-2.6.6" "$BUILD_DIR/rubies/"
 echo "[DEBUG] Ruby copied to $BUILD_DIR/rubies/ruby-2.6.6"
 
-# Install bundler in the Ruby installation with SSL verification disabled
-echo "-----> Installing bundler in Ruby (with SSL verification disabled)"
-GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0" GEM_PATH="$RUBY_PATH/lib/ruby/gems/2.6.0" "$RUBY_PATH/bin/gem" install bundler --no-document --source http://rubygems.org || \
-  GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0" GEM_PATH="$RUBY_PATH/lib/ruby/gems/2.6.0" "$RUBY_PATH/bin/gem" install bundler --no-document --source http://rubygems.org --platform ruby || \
-  GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0" GEM_PATH="$RUBY_PATH/lib/ruby/gems/2.6.0" "$RUBY_PATH/bin/gem" install bundler -v 2.3.25 --no-document --source http://rubygems.org || \
-  echo "[WARNING] Failed to install bundler from RubyGems.org"
+# List available bundler versions
+echo "-----> Listing available bundler versions in RubyGems"
+BUNDLER_SPECS=$(ls "$RUBY_PATH/lib/ruby/gems/2.6.0/specifications" | grep bundler | grep gemspec || true)
+echo "[DEBUG] Bundler gemspecs found: $BUNDLER_SPECS"
+
+BUNDLER_VERSIONS=$(echo "$BUNDLER_SPECS" | sed -n 's/bundler-\(.*\)\.gemspec/\1/p')
+echo "[DEBUG] Bundler versions available: $BUNDLER_VERSIONS"
+
+BUNDLER_VERSION_TO_USE=""
+if [ -n "$BUNDLER_VERSIONS" ]; then
+  # Use the first available version (sorted highest)
+  BUNDLER_VERSION_TO_USE=$(echo "$BUNDLER_VERSIONS" | sort -Vr | head -n1)
+  echo "[DEBUG] Will use bundler version: $BUNDLER_VERSION_TO_USE"
+else
+  echo "[DEBUG] No bundler gemspec found, installing bundler (with SSL verification disabled)"
+  GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0" GEM_PATH="$RUBY_PATH/lib/ruby/gems/2.6.0" "$RUBY_PATH/bin/gem" install bundler --no-document --source http://rubygems.org || \
+    GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0" GEM_PATH="$RUBY_PATH/lib/ruby/gems/2.6.0" "$RUBY_PATH/bin/gem" install bundler --no-document --source http://rubygems.org --platform ruby || \
+    GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0" GEM_PATH="$RUBY_PATH/lib/ruby/gems/2.6.0" "$RUBY_PATH/bin/gem" install bundler -v 2.3.25 --no-document --source http://rubygems.org || \
+    echo "[WARNING] Failed to install bundler from RubyGems.org"
+  # Re-list after install
+  BUNDLER_SPECS=$(ls "$RUBY_PATH/lib/ruby/gems/2.6.0/specifications" | grep bundler | grep gemspec || true)
+  BUNDLER_VERSIONS=$(echo "$BUNDLER_SPECS" | sed -n 's/bundler-\(.*\)\.gemspec/\1/p')
+  BUNDLER_VERSION_TO_USE=$(echo "$BUNDLER_VERSIONS" | sort -Vr | head -n1)
+fi
+
 
 # Check if bundler was installed
 # Ensure bundler gemspec exists
@@ -668,11 +687,11 @@ BUNDLED WITH
    2.3.25
 EOF
 echo "[DEBUG] Created Gemfile.lock"
-# Patch Gemfile.lock to ensure it uses the installed bundler version
-BUNDLER_VERSION_INSTALLED=$($RUBY_PATH/bin/bundle --version 2>/dev/null | awk '{print $3}')
-if [ -n "$BUNDLER_VERSION_INSTALLED" ]; then
-  sed -i.bak "s/^   .*/   $BUNDLER_VERSION_INSTALLED/" "$BUILD_DIR/Gemfile.lock"
-  echo "[DEBUG] Patched Gemfile.lock to use bundler $BUNDLER_VERSION_INSTALLED"
+# Patch Gemfile.lock to ensure it uses the available bundler version
+echo "[DEBUG] Patching Gemfile.lock to use bundler $BUNDLER_VERSION_TO_USE"
+if [ -n "$BUNDLER_VERSION_TO_USE" ]; then
+  sed -i.bak "s/^   .*/   $BUNDLER_VERSION_TO_USE/" "$BUILD_DIR/Gemfile.lock"
+  echo "[DEBUG] Patched Gemfile.lock to use bundler $BUNDLER_VERSION_TO_USE"
 fi
 
 # Install rake gem directly
