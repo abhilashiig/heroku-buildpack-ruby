@@ -204,9 +204,11 @@ fi
 # Set up GEM_HOME and GEM_PATH
 export GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0"
 export GEM_PATH="$RUBY_PATH/lib/ruby/gems/2.6.0"
+export BUNDLE_GEMFILE="$HOME/Gemfile"
 if [ "$DEBUG" = "1" ]; then
   echo "[DEBUG] GEM_HOME: $GEM_HOME"
   echo "[DEBUG] GEM_PATH: $GEM_PATH"
+  echo "[DEBUG] BUNDLE_GEMFILE: $BUNDLE_GEMFILE"
 fi
 
 # Create bundler and rake scripts if they don't exist
@@ -590,6 +592,23 @@ GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0" GEM_PATH="$RUBY_PATH/lib/ruby/gems/2.6
   echo "[WARNING] Failed to install bundler from RubyGems.org"
 
 # Check if bundler was installed
+# Ensure bundler gemspec exists
+BUNDLER_GEMSPEC="$RUBY_PATH/lib/ruby/gems/2.6.0/specifications/bundler-2.3.25.gemspec"
+if [ ! -f "$BUNDLER_GEMSPEC" ]; then
+  echo "[DEBUG] bundler-2.3.25.gemspec missing, attempting to create it"
+  BUNDLER_DIR=$(find "$RUBY_PATH/lib/ruby/gems/2.6.0/gems" -type d -name 'bundler-2.3.25' | head -n1)
+  if [ -n "$BUNDLER_DIR" ]; then
+    GEMSPEC_SRC="$BUNDLER_DIR/bundler.gemspec"
+    if [ -f "$GEMSPEC_SRC" ]; then
+      cp "$GEMSPEC_SRC" "$BUNDLER_GEMSPEC"
+      echo "[DEBUG] Copied bundler.gemspec to $BUNDLER_GEMSPEC"
+    else
+      echo "[WARNING] Could not find bundler.gemspec in $BUNDLER_DIR"
+    fi
+  else
+    echo "[WARNING] Could not find bundler-2.3.25 directory"
+  fi
+fi
 if [ -x "$RUBY_PATH/bin/bundle" ]; then
   echo "[DEBUG] Bundler installed: $($RUBY_PATH/bin/bundle --version)"
 else
@@ -649,6 +668,12 @@ BUNDLED WITH
    2.3.25
 EOF
 echo "[DEBUG] Created Gemfile.lock"
+# Patch Gemfile.lock to ensure it uses the installed bundler version
+BUNDLER_VERSION_INSTALLED=$($RUBY_PATH/bin/bundle --version 2>/dev/null | awk '{print $3}')
+if [ -n "$BUNDLER_VERSION_INSTALLED" ]; then
+  sed -i.bak "s/^   .*/   $BUNDLER_VERSION_INSTALLED/" "$BUILD_DIR/Gemfile.lock"
+  echo "[DEBUG] Patched Gemfile.lock to use bundler $BUNDLER_VERSION_INSTALLED"
+fi
 
 # Install rake gem directly
 echo "-----> Installing rake gem"
