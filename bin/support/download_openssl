@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+# Downloads a precompiled OpenSSL 1.0.x for use with Ruby
+# This is needed because the Ruby in rubies/ was compiled against OpenSSL 1.0.0
+
+# fail hard
+set -o pipefail
+# fail harder
+set -eu
+
+BIN_DIR=$(cd "$(dirname "$0")" || exit; pwd)
+BUILDPACK_DIR=$(dirname "$(dirname "$BIN_DIR")")
+BUILD_DIR=$1
+CACHE_DIR=$2
+
+OPENSSL_DIR="$BUILD_DIR/vendor/openssl"
+OPENSSL_VERSION="1.0.1e"
+OPENSSL_URL="https://moonshot-buildpack-ruby.s3.amazonaws.com/binaries/openssl-1.0.1e.tgz"
+
+# Create directory for OpenSSL
+mkdir -p "$OPENSSL_DIR"
+
+echo "-----> Downloading OpenSSL ${OPENSSL_VERSION}"
+
+# Download and extract OpenSSL
+curl_retry_on_18() {
+  local ec=18;
+  local attempts=0;
+  while (( ec == 18 && attempts++ < 3 )); do
+    curl "$@" # -C - would return code 33 if unsupported by server
+    ec=$?
+  done
+  return $ec
+}
+
+curl_retry_on_18 --fail --silent --location -o "$OPENSSL_DIR/openssl.tgz" "$OPENSSL_URL" || {
+  echo "Failed to download OpenSSL. This is required for the Ruby in rubies/ to work."
+  exit 1
+}
+
+# Extract OpenSSL
+tar -xzf "$OPENSSL_DIR/openssl.tgz" -C "$OPENSSL_DIR" --strip-components=1
+rm "$OPENSSL_DIR/openssl.tgz"
+
+echo "-----> OpenSSL ${OPENSSL_VERSION} installed to ${OPENSSL_DIR}"
+
+# Return the OpenSSL directory path
+echo "$OPENSSL_DIR"
