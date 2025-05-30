@@ -31,70 +31,71 @@ install_bootstrap_ruby()
   local bin_dir=$1
   local buildpack_dir=$2
 
-  echo "DEBUG: install_bootstrap_ruby called with bin_dir=$bin_dir, buildpack_dir=$buildpack_dir"
-  echo "DEBUG: Current STACK=$STACK"
+  echo "DEBUG: install_bootstrap_ruby called with bin_dir=$bin_dir, buildpack_dir=$buildpack_dir" >&2
+  echo "DEBUG: Current STACK=$STACK" >&2
 
   # Multi-arch aware stack support
   if [ "$STACK" == "heroku-24" ]; then
     local arch
     arch=$(dpkg --print-architecture)
     local heroku_buildpack_ruby_dir="$buildpack_dir/vendor/ruby/$STACK/$arch"
-    echo "DEBUG: Using multi-arch path: $heroku_buildpack_ruby_dir"
+    echo "DEBUG: Using multi-arch path: $heroku_buildpack_ruby_dir" >&2
   else
     local heroku_buildpack_ruby_dir="$buildpack_dir/vendor/ruby/$STACK"
-    echo "DEBUG: Using standard path: $heroku_buildpack_ruby_dir"
+    echo "DEBUG: Using standard path: $heroku_buildpack_ruby_dir" >&2
   fi
 
   # The -d flag checks to see if a file exists and is a directory.
   # This directory may be non-empty if a previous compile has
   # already placed a Ruby executable here.
   if [ ! -d "$heroku_buildpack_ruby_dir" ]; then
-    echo "DEBUG: Directory $heroku_buildpack_ruby_dir does not exist, creating temporary directory"
+    echo "DEBUG: Directory $heroku_buildpack_ruby_dir does not exist, creating temporary directory" >&2
     heroku_buildpack_ruby_dir=$(mktemp -d)
-    echo "DEBUG: Created temporary directory: $heroku_buildpack_ruby_dir"
+    echo "DEBUG: Created temporary directory: $heroku_buildpack_ruby_dir" >&2
     
     # bootstrap ruby
-    echo "DEBUG: Calling download_ruby script"
+    echo "DEBUG: Calling download_ruby script" >&2
     "$bin_dir"/support/download_ruby "$bin_dir" "$heroku_buildpack_ruby_dir"
     
-    echo "DEBUG: After download_ruby, checking for Ruby binary:"
+    echo "DEBUG: After download_ruby, checking for Ruby binary:" >&2
     if [ -f "$heroku_buildpack_ruby_dir/bin/ruby" ]; then
-      echo "DEBUG: Ruby binary found at $heroku_buildpack_ruby_dir/bin/ruby"
+      echo "DEBUG: Ruby binary found at $heroku_buildpack_ruby_dir/bin/ruby" >&2
       ls -la "$heroku_buildpack_ruby_dir/bin/ruby"
     else
-      echo "DEBUG: Ruby binary NOT found at $heroku_buildpack_ruby_dir/bin/ruby"
-      echo "DEBUG: Listing contents of $heroku_buildpack_ruby_dir:"
+      echo "DEBUG: Ruby binary NOT found at $heroku_buildpack_ruby_dir/bin/ruby" >&2
+      echo "DEBUG: Listing contents of $heroku_buildpack_ruby_dir:" >&2
       ls -la "$heroku_buildpack_ruby_dir"
       
       if [ -d "$heroku_buildpack_ruby_dir/bin" ]; then
-        echo "DEBUG: Listing bin directory:"
+        echo "DEBUG: Listing bin directory:" >&2
         ls -la "$heroku_buildpack_ruby_dir/bin"
       else
-        echo "DEBUG: bin directory does not exist"
-        echo "DEBUG: Searching for ruby binary in $heroku_buildpack_ruby_dir:"
-        find "$heroku_buildpack_ruby_dir" -name ruby -type f 2>/dev/null || echo "DEBUG: No ruby binary found"
+        echo "DEBUG: bin directory does not exist" >&2
+        echo "DEBUG: Searching for ruby binary in $heroku_buildpack_ruby_dir:" >&2
+        find "$heroku_buildpack_ruby_dir" -name ruby -type f 2>/dev/null || echo "DEBUG: No ruby binary found" >&2
       fi
     fi
     
     function atexit {
       # shellcheck disable=SC2317
-      echo "DEBUG: atexit function called, would remove $heroku_buildpack_ruby_dir"
+      echo "DEBUG: atexit function called, would remove $heroku_buildpack_ruby_dir" >&2
       # Commenting out to preserve the directory for debugging
       # rm -rf "$heroku_buildpack_ruby_dir"
     }
     trap atexit EXIT
   else
-    echo "DEBUG: Directory $heroku_buildpack_ruby_dir already exists"
-    echo "DEBUG: Checking for Ruby binary:"
+    echo "DEBUG: Directory $heroku_buildpack_ruby_dir already exists" >&2
+    echo "DEBUG: Checking for Ruby binary:" >&2
     if [ -f "$heroku_buildpack_ruby_dir/bin/ruby" ]; then
-      echo "DEBUG: Ruby binary found at $heroku_buildpack_ruby_dir/bin/ruby"
+      echo "DEBUG: Ruby binary found at $heroku_buildpack_ruby_dir/bin/ruby" >&2
       ls -la "$heroku_buildpack_ruby_dir/bin/ruby"
     else
-      echo "DEBUG: Ruby binary NOT found at $heroku_buildpack_ruby_dir/bin/ruby"
+      echo "DEBUG: Ruby binary NOT found at $heroku_buildpack_ruby_dir/bin/ruby" >&2
     fi
   fi
 
-  echo "DEBUG: Returning bootstrap Ruby directory: $heroku_buildpack_ruby_dir"
+  echo "DEBUG: Returning bootstrap Ruby directory: $heroku_buildpack_ruby_dir" >&2
+  # Only output the directory path to stdout - this is what gets captured by the caller
   echo "$heroku_buildpack_ruby_dir"
 }
 
