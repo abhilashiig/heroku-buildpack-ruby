@@ -46,6 +46,12 @@ fi
 echo "DEBUG: Setting PATH to include $bootstrap_ruby_dir/bin/"
 export PATH="$bootstrap_ruby_dir/bin/:$PATH"
 echo "DEBUG: PATH is now: $PATH"
+
+# Set LD_LIBRARY_PATH to find Ruby's shared libraries
+echo "DEBUG: Setting LD_LIBRARY_PATH to include $bootstrap_ruby_dir/ruby-2.6.6/lib/"
+export LD_LIBRARY_PATH="$bootstrap_ruby_dir/ruby-2.6.6/lib/:${LD_LIBRARY_PATH:-}"
+echo "DEBUG: LD_LIBRARY_PATH is now: $LD_LIBRARY_PATH"
+
 unset GEM_PATH
 echo "DEBUG: GEM_PATH unset"
 
