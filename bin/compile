@@ -81,8 +81,25 @@ echo "[DEBUG] Setting up OpenSSL environment for Ruby"
 # Set LD_LIBRARY_PATH to include both Ruby and OpenSSL libraries
 export LD_LIBRARY_PATH="$RUBY_PATH/lib:$OPENSSL_DIR/lib:${LD_LIBRARY_PATH:-}"
 
-# Set RUBYLIB for Ruby libraries
-export RUBYLIB="$RUBY_LIB_DIR/2.6.0:$RUBY_LIB_DIR/2.6.0/x86_64-linux:$RUBY_LIB_DIR/site_ruby/2.6.0:$RUBY_LIB_DIR/vendor_ruby/2.6.0:${RUBYLIB:-}"
+# Set RUBYLIB for Ruby libraries - make sure to include the correct paths for RubyGems
+export RUBYLIB="$RUBY_LIB_DIR/2.6.0:$RUBY_LIB_DIR/2.6.0/x86_64-linux:$RUBY_LIB_DIR/site_ruby/2.6.0:$RUBY_LIB_DIR/vendor_ruby/2.6.0:$RUBY_LIB_DIR:${RUBYLIB:-}"
+
+# Check if rubygems.rb exists in the expected location
+if [ ! -f "$RUBY_LIB_DIR/2.6.0/rubygems.rb" ]; then
+  echo "[DEBUG] rubygems.rb not found in expected location, checking other locations"
+  
+  # Find rubygems.rb in the Ruby installation
+  RUBYGEMS_PATH=$(find "$RUBY_PATH" -name "rubygems.rb" | head -n 1)
+  
+  if [ -n "$RUBYGEMS_PATH" ]; then
+    echo "[DEBUG] Found rubygems.rb at $RUBYGEMS_PATH"
+    RUBYGEMS_DIR=$(dirname "$RUBYGEMS_PATH")
+    export RUBYLIB="$RUBYGEMS_DIR:$RUBYLIB"
+    echo "[DEBUG] Added $RUBYGEMS_DIR to RUBYLIB"
+  else
+    echo "[WARNING] Could not find rubygems.rb in Ruby installation"
+  fi
+fi
 
 # Create symlinks to OpenSSL libraries in Ruby's lib directory
 echo "[DEBUG] Creating symlinks to OpenSSL libraries"
@@ -116,6 +133,33 @@ fi
 # Try to load OpenSSL and print diagnostic information
 echo "[DEBUG] Attempting to load OpenSSL with Ruby..."
 "$RUBY_BIN" -e 'begin; require "openssl"; puts "OpenSSL loaded successfully: #{OpenSSL::OPENSSL_VERSION}"; rescue LoadError => e; puts "Failed to load OpenSSL: #{e.message}"; end'
+
+# Test if RubyGems can be loaded
+echo "[DEBUG] Attempting to load RubyGems with Ruby..."
+"$RUBY_BIN" -e 'begin; require "rubygems"; puts "RubyGems loaded successfully: #{Gem::VERSION}"; rescue LoadError => e; puts "Failed to load RubyGems: #{e.message}"; end'
+
+# If RubyGems can't be loaded, create a simple loader
+if ! "$RUBY_BIN" -e 'begin; require "rubygems"; exit(0); rescue LoadError; exit(1); end'; then
+  echo "[DEBUG] Creating custom RubyGems loader"
+  
+  # Find the actual rubygems.rb file
+  RUBYGEMS_IMPL=$(find "$RUBY_PATH" -name "rubygems.rb" | grep -v "default" | head -n 1)
+  
+  if [ -n "$RUBYGEMS_IMPL" ]; then
+    # Create a custom rubygems.rb loader in the expected location
+    mkdir -p "$(dirname "$RUBY_LIB_DIR/2.6.0/rubygems.rb")"
+    cat > "$RUBY_LIB_DIR/2.6.0/rubygems.rb" << EOF
+# Custom RubyGems loader created by Heroku buildpack
+load '$RUBYGEMS_IMPL'
+EOF
+    echo "[DEBUG] Created custom RubyGems loader pointing to $RUBYGEMS_IMPL"
+    
+    # Test if it works
+    "$RUBY_BIN" -e 'begin; require "rubygems"; puts "Custom RubyGems loader works: #{Gem::VERSION}"; rescue LoadError => e; puts "Custom loader failed: #{e.message}"; end'
+  else
+    echo "[WARNING] Could not find RubyGems implementation file"
+  fi
+fi
 
 # Create .profile.d script to set up environment for the app
 echo "-----> Creating .profile.d script for Ruby environment"
