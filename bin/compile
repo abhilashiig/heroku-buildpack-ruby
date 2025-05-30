@@ -20,6 +20,8 @@ RUBY_VERSION="2.6.6"
 RUBY_PATH="$RUBIES_DIR/ruby-$RUBY_VERSION"
 RUBY_BIN="$RUBY_PATH/bin/ruby"
 
+echo "-----> Setting up Ruby environment from $RUBIES_DIR"
+
 # Check if Ruby exists in the rubies directory
 if [ ! -f "$RUBY_BIN" ]; then
   echo "[ERROR] Precompiled Ruby not found at $RUBY_BIN"
@@ -41,8 +43,11 @@ RUBY_LIB_DIR="$RUBY_PATH/lib/ruby"
 # Add Ruby to PATH
 export PATH="$RUBY_PATH/bin:$PATH"
 
-# Set LD_LIBRARY_PATH for shared libraries
-export LD_LIBRARY_PATH="$RUBY_PATH/lib:${LD_LIBRARY_PATH:-}"
+# Check for system OpenSSL libraries and add them to LD_LIBRARY_PATH
+SYSTEM_OPENSSL_PATHS="/usr/lib/x86_64-linux-gnu:/usr/lib64:/usr/lib:/lib/x86_64-linux-gnu:/lib64:/lib"
+
+# Set LD_LIBRARY_PATH to include both Ruby and system libraries
+export LD_LIBRARY_PATH="$RUBY_PATH/lib:$SYSTEM_OPENSSL_PATHS:${LD_LIBRARY_PATH:-}"
 
 # Set RUBYLIB for Ruby libraries
 export RUBYLIB="$RUBY_LIB_DIR/2.6.0:$RUBY_LIB_DIR/2.6.0/x86_64-linux:$RUBY_LIB_DIR/site_ruby/2.6.0:$RUBY_LIB_DIR/vendor_ruby/2.6.0:${RUBYLIB:-}"
@@ -57,6 +62,10 @@ echo "[DEBUG] LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 echo "[DEBUG] RUBYLIB: $RUBYLIB"
 echo "[DEBUG] Which ruby: $(which ruby 2>/dev/null || echo 'ruby not in PATH')"
 
+# Find OpenSSL libraries in the system
+echo "[DEBUG] Looking for OpenSSL libraries in the system:"
+find /usr/lib /lib -name "libssl.so*" -o -name "libcrypto.so*" 2>/dev/null | grep -v "not found" || echo "No OpenSSL libraries found"
+
 # Test Ruby
 if "$RUBY_BIN" --version > /dev/null 2>&1; then
   echo "[DEBUG] Ruby version: $($RUBY_BIN --version)"
@@ -67,11 +76,17 @@ else
   exit 1
 fi
 
-# Check if OpenSSL is working
-if "$RUBY_BIN" -ropenssl -e 'puts "[DEBUG] OpenSSL version: #{OpenSSL::OPENSSL_VERSION}"' > /dev/null 2>&1; then
-  "$RUBY_BIN" -ropenssl -e 'puts "[DEBUG] OpenSSL version: #{OpenSSL::OPENSSL_VERSION}"'
-else
-  echo "[WARNING] Ruby cannot load OpenSSL. This may cause issues with SSL/TLS connections."
+# Try to load OpenSSL and print diagnostic information
+echo "[DEBUG] Attempting to load OpenSSL with Ruby..."
+"$RUBY_BIN" -e 'begin; require "openssl"; puts "OpenSSL loaded successfully: #{OpenSSL::OPENSSL_VERSION}"; rescue LoadError => e; puts "Failed to load OpenSSL: #{e.message}"; end'
+
+# Create a symlink from libcrypto.so.1.0.0 to libcrypto.so.1.1 if needed
+if [ ! -f "$RUBY_PATH/lib/libcrypto.so.1.0.0" ] && [ -f "/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1" ]; then
+  echo "[DEBUG] Creating symlink from libcrypto.so.1.0.0 to libcrypto.so.1.1"
+  ln -sf "/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1" "$RUBY_PATH/lib/libcrypto.so.1.0.0"
+  ln -sf "/usr/lib/x86_64-linux-gnu/libssl.so.1.1" "$RUBY_PATH/lib/libssl.so.1.0.0"
+  echo "[DEBUG] Symlinks created. Retrying OpenSSL load..."
+  "$RUBY_BIN" -e 'begin; require "openssl"; puts "OpenSSL loaded successfully after symlink: #{OpenSSL::OPENSSL_VERSION}"; rescue LoadError => e; puts "Still failed to load OpenSSL after symlink: #{e.message}"; end'
 fi
 
 # Check if we need Java
@@ -93,5 +108,5 @@ EOM
 fi
 
 # Run the Ruby compile script
-echo "[DEBUG] Running Ruby compile script with precompiled Ruby"
+echo "[DEBUG] Running Ruby compile script with Ruby: $RUBY_BIN"
 "$RUBY_BIN" "$BIN_DIR/support/ruby_compile" "$@"
