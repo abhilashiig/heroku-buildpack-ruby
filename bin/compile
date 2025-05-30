@@ -52,6 +52,11 @@ echo "DEBUG: Setting LD_LIBRARY_PATH to include $bootstrap_ruby_dir/ruby-2.6.6/l
 export LD_LIBRARY_PATH="$bootstrap_ruby_dir/ruby-2.6.6/lib/:${LD_LIBRARY_PATH:-}"
 echo "DEBUG: LD_LIBRARY_PATH is now: $LD_LIBRARY_PATH"
 
+# Set RUBYLIB to find Ruby's standard libraries
+echo "DEBUG: Setting RUBYLIB to include Ruby's standard libraries"
+export RUBYLIB="$bootstrap_ruby_dir/ruby-2.6.6/lib/ruby/2.6.0:$bootstrap_ruby_dir/ruby-2.6.6/lib/ruby/2.6.0/x86_64-linux:${RUBYLIB:-}"
+echo "DEBUG: RUBYLIB is now: $RUBYLIB"
+
 unset GEM_PATH
 echo "DEBUG: GEM_PATH unset"
 
