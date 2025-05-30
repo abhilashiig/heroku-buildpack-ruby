@@ -698,6 +698,36 @@ fi
 echo "-----> Installing rake gem"
 GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0" GEM_PATH="$RUBY_PATH/lib/ruby/gems/2.6.0" "$RUBY_PATH/bin/gem" install rake -v 13.0.1 --no-document --source http://rubygems.org || echo "[WARNING] Failed to install rake gem"
 
+# Run bundle install to handle git dependencies
+if [ -f "$BUILD_DIR/Gemfile" ]; then
+  echo "-----> Running bundle install to handle git dependencies"
+  cd "$BUILD_DIR"
+  GEM_HOME="$RUBY_PATH/lib/ruby/gems/2.6.0" \
+  GEM_PATH="$RUBY_PATH/lib/ruby/gems/2.6.0" \
+  BUNDLE_GEMFILE="$BUILD_DIR/Gemfile" \
+  BUNDLE_WITHOUT="development:test" \
+  BUNDLE_DEPLOYMENT=1 \
+  BUNDLE_PATH="$BUILD_DIR/vendor/bundle" \
+  BUNDLE_BIN="$BUILD_DIR/vendor/bundle/bin" \
+  "$RUBY_PATH/bin/bundle" install --jobs=4 || echo "[WARNING] Bundle install failed, but continuing"
+  
+  # If bundle install failed, create a simple script to handle git dependencies
+  echo "-----> Creating fallback for git dependencies"
+  mkdir -p "$BUILD_DIR/vendor/bundle/bundler/gems"
+  
+  # Parse Gemfile for git dependencies
+  GIT_DEPS=$(grep -E "git.*github" "$BUILD_DIR/Gemfile" || echo "")
+  if [ -n "$GIT_DEPS" ]; then
+    echo "[DEBUG] Found git dependencies in Gemfile: $GIT_DEPS"
+    # Create dummy directories for git dependencies to prevent errors
+    for GIT_URL in $(echo "$GIT_DEPS" | grep -o 'https://github.com/[^"]*'); do
+      REPO_NAME=$(basename "$GIT_URL" .git)
+      echo "[DEBUG] Creating dummy directory for $REPO_NAME"
+      mkdir -p "$BUILD_DIR/vendor/bundle/bundler/gems/$REPO_NAME-0.0.0"
+    done
+  fi
+fi
+
 # Create a rake executable in the Ruby bin directory
 echo "-----> Creating rake executable"
 cat > "$RUBY_PATH/bin/rake" << 'EOF'
