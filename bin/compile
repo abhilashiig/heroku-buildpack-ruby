@@ -19,9 +19,16 @@ LOCAL_RUBY_BIN="$RUBIES_DIR/ruby-$RUBY_VERSION/bin/ruby"
 if [ -x "$LOCAL_RUBY_BIN" ]; then
   echo "[DEBUG] Using Ruby from local rubies directory: $LOCAL_RUBY_BIN"
   BOOTSTRAP_RUBY_BIN="$LOCAL_RUBY_BIN"
+  RUBY_LIB_DIR="$RUBIES_DIR/ruby-$RUBY_VERSION/lib/ruby"
+  
+  # Set up environment variables
   export PATH="$RUBIES_DIR/ruby-$RUBY_VERSION/bin/:$PATH"
   export LD_LIBRARY_PATH="$RUBIES_DIR/ruby-$RUBY_VERSION/lib:${LD_LIBRARY_PATH:-}"
+  export RUBYLIB="$RUBY_LIB_DIR/2.6.0:$RUBY_LIB_DIR/2.6.0/x86_64-linux:$RUBY_LIB_DIR/site_ruby/2.6.0:$RUBY_LIB_DIR/vendor_ruby/2.6.0:${RUBYLIB:-}"
+  
+  # Debug output
   echo "[DEBUG] LD_LIBRARY_PATH set to: $LD_LIBRARY_PATH"
+  echo "[DEBUG] RUBYLIB set to: $RUBYLIB"
 else
   echo "[DEBUG] Local Ruby not found at $LOCAL_RUBY_BIN. Falling back to bootstrap_ruby_dir."
   bootstrap_ruby_dir=$(install_bootstrap_ruby "$BIN_DIR" "$BUILDPACK_DIR")
